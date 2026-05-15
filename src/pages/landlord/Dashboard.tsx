@@ -28,6 +28,7 @@ export default function LandlordDashboard() {
   const cards = [
     { label: "Active listings", value: stats.active, icon: Building2 },
     { label: "Pending applications", value: stats.pending, icon: FileText },
+    { label: "Lease negotiations", value: stats.negotiating, icon: FileText },
     { label: "Active leases", value: stats.leases, icon: CheckCircle },
     { label: "Monthly revenue", value: formatPKR(stats.revenue), icon: Building2 },
   ];
