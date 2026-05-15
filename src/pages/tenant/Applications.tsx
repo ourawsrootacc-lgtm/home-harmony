@@ -55,8 +55,11 @@ export default function TenantApplications() {
                 <Link to={`/properties/${r.properties?.id}`} className="font-semibold hover:underline">{r.properties?.title ?? "Property"}</Link>
                 <div className="text-sm text-muted-foreground">{r.properties?.city} · applied {relativeTime(r.created_at)}</div>
               </div>
-              <Badge className={`${STATUS_VARIANT[r.status]} capitalize`}>{r.status}</Badge>
+              <Badge className={`${STATUS_VARIANT[r.status] ?? "bg-muted"} capitalize`}>{r.status.replace("_", " ")}</Badge>
               {r.status === "pending" && <Button variant="outline" size="sm" onClick={() => cancel(r.id)}>Cancel</Button>}
+              {r.status === "offer_sent" && (
+                <Button asChild size="sm"><Link to="/app/tenant/lease">Review offer</Link></Button>
+              )}
             </div>
           ))}
         </div>
