@@ -39,8 +39,8 @@ npm run dev                # http://localhost:8080
 
 Either:
 
-- **Easy** — open the Supabase SQL editor and run the files in `supabase/migrations/` in order (0001 → 0006), or
-- **CLI** — `npx supabase link --project-ref <ref> && npx supabase db push`.
+- **Easy** — open the Supabase SQL editor and run the files in `db/migrations/` in order (0001 → 0006), or
+- **CLI** — copy the files into `supabase/migrations/`, then `npx supabase link --project-ref <ref> && npx supabase db push`.
 
 Then seed demo users + sample listings:
 
