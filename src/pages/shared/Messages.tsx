@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader, EmptyState } from "@/components/feedback/Feedback";
@@ -11,8 +12,19 @@ import { toast } from "sonner";
 
 export default function Messages() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
   const [rows, setRows] = useState<any[]>([]);
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(params.get("to") ?? "");
+  const [recipientName, setRecipientName] = useState<string>("");
+
+  useEffect(() => {
+    const to = params.get("to");
+    if (to) {
+      setRecipient(to);
+      supabase.from("profiles").select("full_name").eq("id", to).maybeSingle()
+        .then(({ data }) => setRecipientName(data?.full_name ?? ""));
+    }
+  }, [params]);
   const [body, setBody] = useState("");
 
   const load = () => {
