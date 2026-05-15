@@ -68,6 +68,11 @@ export default function LandlordListings() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                {r.status === "leased" && (
+                  <Button variant="outline" size="sm" onClick={() => endLease(r.id)}>
+                    <DoorOpen className="h-4 w-4 mr-1" />End lease
+                  </Button>
+                )}
                 <Button asChild variant="ghost" size="sm"><Link to={`/app/landlord/listings/${r.id}/edit`}><Pencil className="h-4 w-4" /></Link></Button>
                 <Button variant="ghost" size="sm" onClick={() => remove(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>
