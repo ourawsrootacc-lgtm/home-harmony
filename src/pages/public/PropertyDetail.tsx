@@ -123,10 +123,19 @@ export default function PropertyDetail() {
             {p.profiles?.phone && <div className="text-muted-foreground">{p.profiles.phone}</div>}
           </div>
           <div className="border-t my-4" />
-          <Textarea placeholder="Message to landlord (optional)…" value={message} onChange={(e) => setMessage(e.target.value)} rows={3} />
-          <Button className="w-full mt-3" onClick={apply} disabled={submitting}>
-            {user ? "Apply now" : "Log in to apply"}
-          </Button>
+          {p.status !== "active" ? (
+            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              This property is currently <span className="font-medium capitalize">{p.status}</span> and
+              not accepting applications.
+            </div>
+          ) : (
+            <>
+              <Textarea placeholder="Message to landlord (optional)…" value={message} onChange={(e) => setMessage(e.target.value)} rows={3} />
+              <Button className="w-full mt-3" onClick={apply} disabled={submitting}>
+                {user ? "Apply now" : "Log in to apply"}
+              </Button>
+            </>
+          )}
         </div>
       </aside>
     </div>
