@@ -19,16 +19,37 @@ export default function LandlordApplications() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  const load = async () => {
     if (!user) return;
     setLoading(true);
-    supabase.from("applications")
-      .select("*, properties!inner(id,title,landlord_id), profiles:tenant_id(full_name,phone)")
+
+    const { data: apps, error } = await supabase
+      .from("applications")
+      .select("*, properties!inner(id,title,landlord_id)")
       .eq("properties.landlord_id", user.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => { setRows(data ?? []); setLoading(false); });
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("applications fetch error:", error);
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+
+    const tenantIds = Array.from(new Set((apps ?? []).map((a) => a.tenant_id)));
+    let profilesById: Record<string, { full_name: string | null; phone: string | null }> = {};
+    if (tenantIds.length) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, full_name, phone")
+        .in("id", tenantIds);
+      profilesById = Object.fromEntries((profs ?? []).map((p: any) => [p.id, p]));
+    }
+
+    setRows((apps ?? []).map((a) => ({ ...a, profiles: profilesById[a.tenant_id] ?? null })));
+    setLoading(false);
   };
-  useEffect(load, [user]);
+  useEffect(() => { load(); }, [user]);
 
   const decide = async (a: any, status: "approved" | "rejected") => {
     const { error } = await supabase.from("applications")
