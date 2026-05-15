@@ -10,9 +10,14 @@ import { toast } from "sonner";
 
 const STATUS_VARIANT: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
+  under_review: "bg-sky-100 text-sky-800",
+  offer_sent: "bg-indigo-100 text-indigo-800",
   approved: "bg-emerald-100 text-emerald-800",
+  fulfilled: "bg-emerald-100 text-emerald-800",
+  superseded: "bg-muted text-muted-foreground",
   rejected: "bg-red-100 text-red-800",
   cancelled: "bg-muted text-muted-foreground",
+  withdrawn: "bg-muted text-muted-foreground",
 };
 
 export default function TenantApplications() {
