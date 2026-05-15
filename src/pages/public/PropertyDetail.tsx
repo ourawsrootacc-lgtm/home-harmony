@@ -24,14 +24,30 @@ export default function PropertyDetail() {
 
   useEffect(() => {
     if (!isSupabaseConfigured || !id) { setLoading(false); return; }
-    Promise.all([
-      supabase.from("properties").select("*, profiles:landlord_id(full_name, phone)").eq("id", id).maybeSingle(),
-      supabase.from("property_images").select("url,sort_order").eq("property_id", id).order("sort_order"),
-    ]).then(([{ data: prop }, { data: imgs }]) => {
-      setP(prop);
-      setImages(imgs ?? []);
+    (async () => {
+      const { data: prop, error } = await supabase
+        .from("properties")
+        .select("*")
+        .eq("id", id)
+        .maybeSingle();
+      if (error) console.error("property fetch error:", error);
+
+      if (prop) {
+        const [{ data: imgs }, { data: profile }] = await Promise.all([
+          supabase.from("property_images")
+            .select("url,sort_order")
+            .eq("property_id", id)
+            .order("sort_order"),
+          supabase.from("profiles")
+            .select("full_name, phone")
+            .eq("id", prop.landlord_id)
+            .maybeSingle(),
+        ]);
+        setP({ ...prop, profiles: profile ?? null });
+        setImages(imgs ?? []);
+      }
       setLoading(false);
-    });
+    })();
   }, [id]);
 
   const apply = async () => {
