@@ -10,9 +10,14 @@ import { toast } from "sonner";
 
 const STATUS_VARIANT: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
+  under_review: "bg-sky-100 text-sky-800",
+  offer_sent: "bg-indigo-100 text-indigo-800",
   approved: "bg-emerald-100 text-emerald-800",
+  fulfilled: "bg-emerald-100 text-emerald-800",
+  superseded: "bg-muted text-muted-foreground",
   rejected: "bg-red-100 text-red-800",
   cancelled: "bg-muted text-muted-foreground",
+  withdrawn: "bg-muted text-muted-foreground",
 };
 
 export default function TenantApplications() {
@@ -50,8 +55,11 @@ export default function TenantApplications() {
                 <Link to={`/properties/${r.properties?.id}`} className="font-semibold hover:underline">{r.properties?.title ?? "Property"}</Link>
                 <div className="text-sm text-muted-foreground">{r.properties?.city} · applied {relativeTime(r.created_at)}</div>
               </div>
-              <Badge className={`${STATUS_VARIANT[r.status]} capitalize`}>{r.status}</Badge>
+              <Badge className={`${STATUS_VARIANT[r.status] ?? "bg-muted"} capitalize`}>{r.status.replace("_", " ")}</Badge>
               {r.status === "pending" && <Button variant="outline" size="sm" onClick={() => cancel(r.id)}>Cancel</Button>}
+              {r.status === "offer_sent" && (
+                <Button asChild size="sm"><Link to="/app/tenant/lease">Review offer</Link></Button>
+              )}
             </div>
           ))}
         </div>

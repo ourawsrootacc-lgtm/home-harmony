@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader, EmptyState } from "@/components/feedback/Feedback";
@@ -11,8 +12,19 @@ import { toast } from "sonner";
 
 export default function Messages() {
   const { user } = useAuth();
+  const [params] = useSearchParams();
   const [rows, setRows] = useState<any[]>([]);
-  const [recipient, setRecipient] = useState("");
+  const [recipient, setRecipient] = useState(params.get("to") ?? "");
+  const [recipientName, setRecipientName] = useState<string>("");
+
+  useEffect(() => {
+    const to = params.get("to");
+    if (to) {
+      setRecipient(to);
+      supabase.from("profiles").select("full_name").eq("id", to).maybeSingle()
+        .then(({ data }) => setRecipientName(data?.full_name ?? ""));
+    }
+  }, [params]);
   const [body, setBody] = useState("");
 
   const load = () => {
@@ -56,8 +68,12 @@ export default function Messages() {
       </div>
       <div className="rounded-xl border bg-card p-4 h-fit">
         <h3 className="font-display font-semibold mb-3">New message</h3>
-        <Label>Recipient user ID</Label>
-        <Input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="Paste user id" />
+        <Label>Recipient</Label>
+        {recipientName ? (
+          <div className="text-sm font-medium mt-1 mb-2">{recipientName}</div>
+        ) : (
+          <Input value={recipient} onChange={(e) => setRecipient(e.target.value)} placeholder="Paste user id" />
+        )}
         <Label className="mt-3">Message</Label>
         <Textarea rows={4} value={body} onChange={(e) => setBody(e.target.value)} />
         <Button className="w-full mt-3" onClick={send} disabled={!recipient || !body}>Send</Button>

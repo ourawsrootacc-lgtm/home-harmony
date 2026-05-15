@@ -5,9 +5,10 @@ import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader, EmptyState, LoadingGrid } from "@/components/feedback/Feedback";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Plus, Pencil, Trash2, DoorOpen } from "lucide-react";
 import { formatPKR } from "@/lib/format";
 import { toast } from "sonner";
+import { terminateLease } from "@/lib/lease";
 
 export default function LandlordListings() {
   const { user } = useAuth();
@@ -28,6 +29,20 @@ export default function LandlordListings() {
     if (!confirm("Delete this listing? This cannot be undone.")) return;
     const { error } = await supabase.from("properties").delete().eq("id", id);
     if (error) toast.error(error.message); else { toast.success("Deleted"); load(); }
+  };
+
+  const endLease = async (propertyId: string) => {
+    const reason = prompt(
+      "Reason for ending the lease (statutory ground, mutual agreement, etc.):",
+      "mutual_agreement",
+    );
+    if (!reason) return;
+    const { data: l } = await supabase
+      .from("leases").select("id")
+      .eq("property_id", propertyId).eq("status", "active").maybeSingle();
+    if (!l) { toast.error("No active lease found"); return; }
+    try { await terminateLease(l.id, reason); toast.success("Lease ended, property released."); load(); }
+    catch (e: any) { toast.error(e?.message ?? "Failed"); }
   };
 
   return (
@@ -53,6 +68,11 @@ export default function LandlordListings() {
                 </div>
               </div>
               <div className="flex items-center gap-1">
+                {r.status === "leased" && (
+                  <Button variant="outline" size="sm" onClick={() => endLease(r.id)}>
+                    <DoorOpen className="h-4 w-4 mr-1" />End lease
+                  </Button>
+                )}
                 <Button asChild variant="ghost" size="sm"><Link to={`/app/landlord/listings/${r.id}/edit`}><Pencil className="h-4 w-4" /></Link></Button>
                 <Button variant="ghost" size="sm" onClick={() => remove(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
               </div>
