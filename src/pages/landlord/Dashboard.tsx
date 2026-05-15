@@ -10,17 +10,18 @@ import { Building2, FileText, CheckCircle, Plus } from "lucide-react";
 
 export default function LandlordDashboard() {
   const { user, profile } = useAuth();
-  const [stats, setStats] = useState({ active: 0, pending: 0, leases: 0, revenue: 0 });
+  const [stats, setStats] = useState({ active: 0, pending: 0, negotiating: 0, leases: 0, revenue: 0 });
 
   useEffect(() => {
     if (!user) return;
     Promise.all([
       supabase.from("properties").select("*", { count: "exact", head: true }).eq("landlord_id", user.id).eq("status", "active"),
       supabase.from("applications").select("id, properties!inner(landlord_id)", { count: "exact", head: true }).eq("status", "pending").eq("properties.landlord_id", user.id),
+      supabase.from("leases").select("id", { count: "exact", head: true }).eq("landlord_id", user.id).in("status", ["proposed", "countered", "pending_activation"]),
       supabase.from("leases").select("monthly_rent").eq("landlord_id", user.id).eq("status", "active"),
-    ]).then(([a, b, c]) => {
+    ]).then(([a, b, n, c]) => {
       const revenue = (c.data ?? []).reduce((s, r: any) => s + Number(r.monthly_rent || 0), 0);
-      setStats({ active: a.count ?? 0, pending: b.count ?? 0, leases: c.data?.length ?? 0, revenue });
+      setStats({ active: a.count ?? 0, pending: b.count ?? 0, negotiating: n.count ?? 0, leases: c.data?.length ?? 0, revenue });
     });
   }, [user]);
 
