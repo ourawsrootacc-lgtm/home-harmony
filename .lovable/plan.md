@@ -1,74 +1,99 @@
-## Problem
+## Root cause
 
-`src/pages/public/PropertyDetail.tsx` uses an embedded PostgREST join:
+Same bug as the earlier `PropertyDetail.tsx` issue — a PostgREST embedded join on a relationship that does not exist as a foreign key.
+
+In `src/pages/landlord/Applications.tsx` (line ~26):
 
 ```ts
-supabase
-  .from("properties")
-  .select("*, profiles:landlord_id(full_name, phone)")
-  .eq("id", id)
-  .maybeSingle()
+supabase.from("applications")
+  .select("*, properties!inner(id,title,landlord_id), profiles:tenant_id(full_name,phone)")
+  .eq("properties.landlord_id", user.id)
 ```
 
-But in `db/migrations/0002_properties.sql`, `properties.landlord_id` references `auth.users(id)`, not `public.profiles(id)`. PostgREST has no FK between `properties` and `profiles`, so the embed fails, the request errors, `prop` is `null`, and the page renders **"Property not found."** for every listing.
+- `applications.tenant_id` references **`auth.users(id)`** (see `db/migrations/0003_applications_leases.sql`), NOT `public.profiles(id)`.
+- PostgREST therefore cannot resolve the `profiles:tenant_id(...)` embed → the WHOLE query errors → `data` is `null` → `rows` stays `[]` → the page shows **"No applications yet"** even though the row clearly exists in the `applications` table (your screenshot confirms it).
 
-Browse works because it doesn't join `profiles`.
+The `properties!inner(...)` part is fine because `applications.property_id` does have a real FK to `properties.id`.
 
-## Fix (one file, no DB changes)
+This is identical in shape to the bug we fixed in `PropertyDetail.tsx`. The same pattern likely exists in any other page that tries to embed `profiles` off a user-id column.
 
-Edit `src/pages/public/PropertyDetail.tsx` — fetch the property first, then fetch the landlord's profile in a second call. Both `properties` and `profiles` already have permissive SELECT RLS, so this works without any migration.
+## Fix — one file
 
-### Replace the data-loading block
+**File to edit in your local VS Code:**
+`src/pages/landlord/Applications.tsx`
+
+Replace the data-loading block: drop the `profiles:tenant_id(...)` embed, fetch tenant profiles in a second query, and merge in JS. No DB / migration change needed (the `profiles` table already has a permissive SELECT policy).
+
+### Replace the `load` function
 
 ```tsx
-useEffect(() => {
-  if (!isSupabaseConfigured || !id) { setLoading(false); return; }
+const load = async () => {
+  if (!user) return;
+  setLoading(true);
 
-  (async () => {
-    const { data: prop, error } = await supabase
-      .from("properties")
-      .select("*")
-      .eq("id", id)
-      .maybeSingle();
+  // 1. Applications + their property (FK exists, embed is safe)
+  const { data: apps, error } = await supabase
+    .from("applications")
+    .select("*, properties!inner(id,title,landlord_id)")
+    .eq("properties.landlord_id", user.id)
+    .order("created_at", { ascending: false });
 
-    if (error) console.error("property fetch error:", error);
-
-    if (prop) {
-      const [{ data: imgs }, { data: profile }] = await Promise.all([
-        supabase.from("property_images")
-          .select("url,sort_order")
-          .eq("property_id", id)
-          .order("sort_order"),
-        supabase.from("profiles")
-          .select("full_name, phone")
-          .eq("id", prop.landlord_id)
-          .maybeSingle(),
-      ]);
-      setP({ ...prop, profiles: profile ?? null });
-      setImages(imgs ?? []);
-    }
+  if (error) {
+    console.error("applications fetch error:", error);
+    setRows([]);
     setLoading(false);
-  })();
-}, [id]);
+    return;
+  }
+
+  // 2. Fetch tenant profiles in a second call and merge
+  const tenantIds = Array.from(new Set((apps ?? []).map((a) => a.tenant_id)));
+  let profilesById: Record<string, { full_name: string | null; phone: string | null }> = {};
+  if (tenantIds.length) {
+    const { data: profs } = await supabase
+      .from("profiles")
+      .select("id, full_name, phone")
+      .in("id", tenantIds);
+    profilesById = Object.fromEntries((profs ?? []).map((p) => [p.id, p]));
+  }
+
+  setRows(
+    (apps ?? []).map((a) => ({ ...a, profiles: profilesById[a.tenant_id] ?? null }))
+  );
+  setLoading(false);
+};
+useEffect(() => { load(); }, [user]);
 ```
 
-The rest of the file (JSX reading `p.profiles?.full_name` / `p.profiles?.phone`) stays exactly the same.
+The rest of the JSX (which reads `r.profiles?.full_name` and `r.profiles?.phone`) stays exactly the same.
 
 ## Why this works
 
-- Removes the unsupported PostgREST embed.
-- Property row loads on its own → page renders.
-- Landlord name/phone load via a normal `profiles` SELECT (allowed by `"profiles readable by all"` policy).
-- No migration, no schema change — drop-in code edit you can paste into your local VS Code copy.
+- Removes the unsupported PostgREST embed (`profiles:tenant_id`) that was killing the request.
+- The applications + property embed still works because that FK is real.
+- Tenant names/phones load via a normal `profiles` SELECT (allowed by your existing "profiles readable by all" policy).
+- No schema change, no migration — pure code edit you can paste into your local copy.
 
-## Optional follow-up (not required)
+## Other places to check (same bug pattern)
 
-If you'd rather restore the embed style long-term, add this migration so PostgREST learns the relationship:
+Quickly scan these for the same `profiles:<user_id_column>(...)` embed and apply the same split-query fix if present:
+
+- `src/pages/tenant/Applications.tsx` — if it embeds landlord profile via properties
+- `src/pages/admin/Complaints.tsx` — if it embeds reporter/target profiles
+- `src/pages/shared/Messages.tsx` — if it embeds sender/recipient profiles
+- `src/pages/maintenance/Dashboard.tsx` — if it embeds tenant profiles
+
+If you want, I can audit those files and produce the same drop-in patches in the build step.
+
+## Optional permanent fix (not required for the demo)
+
+Add a real FK so PostgREST learns the relationship and the original embed style works everywhere:
 
 ```sql
-alter table public.properties
-  add constraint properties_landlord_profile_fkey
-  foreign key (landlord_id) references public.profiles(id) on delete cascade;
+alter table public.profiles
+  add constraint profiles_id_fkey_users
+  foreign key (id) references auth.users(id) on delete cascade;
+-- (profiles.id already equals auth.users.id by convention; this just makes it explicit
+--  so PostgREST can traverse applications.tenant_id → auth.users.id → profiles.id.)
 ```
 
-Then the original `select("*, profiles:landlord_id(...)")` would also work. But the code fix above is enough for your demo.
+But the code patch above is enough — no DB work needed for your evaluator demo.
