@@ -29,6 +29,7 @@ export default function PropertyDetail() {
   const [images, setImages] = useState<{ url: string }[]>([]);
   const [active, setActive] = useState(0);
   const [message, setMessage] = useState("");
+  const [drafts, setDrafts] = useState<DraftFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -60,20 +61,50 @@ export default function PropertyDetail() {
     })();
   }, [id]);
 
+  const setDraft = (kind: AppDocKind, file: File | null) => {
+    setDrafts((prev) => {
+      const filtered = prev.filter((d) => d.kind !== kind);
+      return file ? [...filtered, { kind, file }] : filtered;
+    });
+  };
+
+  const has = (k: AppDocKind) => drafts.some((d) => d.kind === k);
+  const hasCnic = has("cnic");
+  const hasIncome = INCOME_PROOF_KINDS.some(has);
+  const canSubmit = hasCnic && hasIncome && !submitting;
+
   const apply = async () => {
     if (!user) { nav("/login"); return; }
     if (role !== "tenant") { toast.error("Only tenants can apply"); return; }
-    setSubmitting(true);
-    const { error } = await supabase.from("applications").insert({
-      property_id: id, tenant_id: user.id, message, status: "pending",
-    });
-    setSubmitting(false);
-    if (error) toast.error(error.message);
-    else {
-      toast.success("Application submitted — now upload your documents so the landlord can review.");
-      setMessage("");
-      nav("/app/tenant/applications");
+    if (!hasCnic || !hasIncome) {
+      toast.error("Attach your CNIC and one income proof (payslip or bank statement) to apply.");
+      return;
     }
+    setSubmitting(true);
+    const { data: app, error } = await supabase.from("applications").insert({
+      property_id: id, tenant_id: user.id, message, status: "pending",
+    }).select().single();
+    if (error || !app) {
+      setSubmitting(false);
+      toast.error(error?.message ?? "Could not submit application");
+      return;
+    }
+    // Upload each attached document. If any fails, the application still exists
+    // but the tenant can re-upload from their Applications page.
+    const failures: string[] = [];
+    for (const d of drafts) {
+      try { await uploadAppDoc(app.id, d.file, d.kind); }
+      catch (e: any) { failures.push(`${APP_DOC_LABEL[d.kind]}: ${e?.message ?? "failed"}`); }
+    }
+    setSubmitting(false);
+    if (failures.length) {
+      toast.error(`Application submitted, but some uploads failed: ${failures.join("; ")}. Open it in My Applications to retry.`);
+    } else {
+      toast.success("Application submitted with your documents.");
+    }
+    setMessage("");
+    setDrafts([]);
+    nav("/app/tenant/applications");
   };
 
   if (!isSupabaseConfigured) return <div className="container mx-auto px-4 py-8"><ConfigBanner /></div>;
