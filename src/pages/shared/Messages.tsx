@@ -399,24 +399,90 @@ export default function Messages() {
                 )}
               </div>
 
-              <div className="border-t p-3 flex gap-2 items-end bg-card">
-                <Textarea
-                  rows={2}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder="Write a message…"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  className="resize-none"
-                />
-                <Button onClick={send} disabled={sending || !body.trim()}>
-                  <Send className="h-4 w-4 mr-1" />
-                  Send
-                </Button>
+              <div className="border-t bg-card">
+                {pending.length > 0 && (
+                  <div className="px-3 pt-3 flex flex-wrap gap-2">
+                    {pending.map((f, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 rounded-full border bg-muted/40 pl-3 pr-1 py-1 text-xs max-w-[240px]"
+                      >
+                        {f.type.startsWith("image/") ? (
+                          <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                        ) : (
+                          <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        <span className="truncate">{f.name}</span>
+                        <span className="opacity-60 shrink-0">{formatFileSize(f.size)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removePending(i)}
+                          className="rounded-full p-1 hover:bg-background"
+                          aria-label={`Remove ${f.name}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="p-3 flex gap-2 items-end">
+                  <div className="flex flex-col gap-1">
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+                    />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => imageInputRef.current?.click()}
+                      aria-label="Attach image"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      aria-label="Attach file"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Textarea
+                    rows={2}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Write a message…"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
+                    className="resize-none"
+                  />
+                  <Button
+                    onClick={send}
+                    disabled={sending || (!body.trim() && pending.length === 0)}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    {sending ? "Sending…" : "Send"}
+                  </Button>
+                </div>
               </div>
             </>
           )}
