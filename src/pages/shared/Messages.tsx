@@ -192,21 +192,64 @@ export default function Messages() {
       });
   }, [activeMessages, active, user]);
 
-  const send = async () => {
-    if (!user || !active || !body.trim()) return;
-    setSending(true);
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({ sender_id: user.id, recipient_id: active, body: body.trim() })
-      .select()
-      .single();
-    setSending(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+  const [pending, setPending] = useState<File[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const next: File[] = [];
+    for (const f of Array.from(list)) {
+      try { validateFile(f); next.push(f); }
+      catch (e: any) { toast.error(e?.message ?? "Invalid file"); }
     }
-    setBody("");
+    if (next.length) setPending((prev) => [...prev, ...next]);
+  };
+
+  const removePending = (i: number) =>
+    setPending((prev) => prev.filter((_, idx) => idx !== i));
+
+  const insertMessage = async (row: Partial<Msg> & { sender_id: string; recipient_id: string }) => {
+    const { data, error } = await supabase.from("messages").insert(row).select().single();
+    if (error) throw error;
     if (data) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data as Msg]));
+  };
+
+  const send = async () => {
+    if (!user || !active) return;
+    if (!body.trim() && pending.length === 0) return;
+    setSending(true);
+    try {
+      // Upload + insert one row per attachment.
+      for (const file of pending) {
+        const up: UploadedAttachment = await uploadMessageAttachment(file);
+        await insertMessage({
+          sender_id: user.id,
+          recipient_id: active,
+          body: "",
+          kind: classifyFile(file),
+          attachment_path: up.path,
+          attachment_name: up.name,
+          attachment_size: up.size,
+          attachment_mime: up.mime,
+        } as any);
+      }
+      // Text message goes last so it appears below the attachments.
+      if (body.trim()) {
+        await insertMessage({
+          sender_id: user.id,
+          recipient_id: active,
+          body: body.trim(),
+          kind: "text",
+        } as any);
+      }
+      setBody("");
+      setPending([]);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to send");
+    } finally {
+      setSending(false);
+    }
   };
 
   const selectThread = (id: string) => {
