@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PK_CITIES } from "@/lib/constants";
 
 export const pkPhoneRegex = /^\+92\d{10}$/;
 export const cnicRegex = /^\d{5}-\d{7}-\d$/;
@@ -31,9 +32,10 @@ export const propertySchema = z.object({
   type: z.enum(["apartment", "house", "portion", "studio", "commercial"]),
   bedrooms: z.coerce.number().int().min(0).max(20),
   bathrooms: z.coerce.number().int().min(0).max(20),
-  area_sqft: z.coerce.number().int().min(50).max(100000),
+  area_marlas: z.coerce.number().min(0.5).max(2000),
   address: z.string().min(5).max(200),
-  city: z.string().min(2).max(60),
+  city: z.enum(PK_CITIES as unknown as [string, ...string[]]),
+  society: z.string().max(80).optional().or(z.literal("")),
   lat: z.coerce.number().min(-90).max(90),
   lng: z.coerce.number().min(-180).max(180),
   monthly_rent: z.coerce.number().int().min(1000).max(9999999999),
