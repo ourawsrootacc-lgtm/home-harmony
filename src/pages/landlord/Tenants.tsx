@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader, EmptyState } from "@/components/feedback/Feedback";
+import { Badge } from "@/components/ui/badge";
 import { formatPKR, formatDate } from "@/lib/format";
 
 const ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"];
