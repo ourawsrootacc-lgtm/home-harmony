@@ -64,7 +64,7 @@ export default function TenantLease() {
     <div>
       <PageHeader
         title="My lease"
-        description="Negotiate terms, sign mutually, and manage your tenancy. A lease becomes binding only when both you and the landlord sign the same version."
+        description="Already discussed terms with your landlord in Messages? Review the formal offer below and accept to make it binding."
       />
       {loading ? <p className="text-muted-foreground">Loading…</p> : (
         <Tabs defaultValue={offers.length ? "offers" : active.length ? "current" : "past"}>
