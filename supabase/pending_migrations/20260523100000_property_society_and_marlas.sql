@@ -39,6 +39,10 @@ for each row execute function public.sync_property_area_sqft();
 alter table public.properties
   drop constraint if exists properties_city_check;
 
+-- Remove legacy rows for unsupported cities so the new check can apply.
+delete from public.properties
+ where city not in ('Karachi','Lahore','Islamabad','Peshawar','Quetta');
+
 alter table public.properties
   add constraint properties_city_check
   check (city in ('Karachi','Lahore','Islamabad','Peshawar','Quetta'));
