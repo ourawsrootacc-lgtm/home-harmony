@@ -45,12 +45,19 @@ export default function TenantMaintenance() {
 
   const onSubmit = async (v: FV) => {
     if (!user || !lease?.property_id) { toast.error("You need an active lease to submit a ticket"); return; }
-    const { error } = await supabase.from("maintenance_tickets").insert({
+    if (photos.length === 0) { toast.error("Please attach at least one photo of the issue"); return; }
+    const { data, error } = await supabase.from("maintenance_tickets").insert({
       tenant_id: user.id, property_id: lease.property_id, ...v,
       status: "submitted", funded_by: funded,
-    });
-    if (error) toast.error(error.message);
-    else { toast.success("Ticket submitted"); reset(); load(); }
+    }).select().single();
+    if (error) { toast.error(error.message); return; }
+    try {
+      for (const f of photos) await uploadAttachment(data.id, f, "issue");
+    } catch (e: any) {
+      toast.error(`Ticket created but photo upload failed: ${e.message}`);
+    }
+    toast.success("Ticket submitted");
+    reset(); setPhotos([]); load();
   };
 
   return (
