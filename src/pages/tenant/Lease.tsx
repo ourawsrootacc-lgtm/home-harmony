@@ -21,6 +21,9 @@ import {
 import LeaseLifecyclePanel from "@/components/lease/LeaseLifecyclePanel";
 import { DocumentList } from "@/components/documents/DocumentList";
 import { listPropertyDocs, type PropertyDoc } from "@/lib/documents";
+import { SubmitPaymentDialog } from "@/components/payments/SubmitPaymentDialog";
+import { listLeasePayments, type PaymentRow } from "@/lib/payments";
+import { Wallet } from "lucide-react";
 
 const OFFER_STATUSES = ["proposed", "countered"];
 const ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"];
