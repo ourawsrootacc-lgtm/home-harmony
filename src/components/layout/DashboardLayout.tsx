@@ -21,6 +21,7 @@ const NAV: Record<string, Item[]> = {
     { to: "/app/landlord", label: "Overview", icon: LayoutDashboard },
     { to: "/app/landlord/listings", label: "Listings", icon: Building2 },
     { to: "/app/landlord/applications", label: "Applications", icon: FileText },
+    { to: "/app/landlord/leases", label: "Leases", icon: FileText },
     { to: "/app/landlord/tenants", label: "Tenants", icon: Users },
   ],
   maintenance: [
