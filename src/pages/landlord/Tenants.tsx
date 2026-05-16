@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader, EmptyState } from "@/components/feedback/Feedback";
+import { Badge } from "@/components/ui/badge";
 import { formatPKR, formatDate } from "@/lib/format";
 
 const ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"];
@@ -56,7 +57,12 @@ export default function LandlordTenants() {
             return (
               <div key={r.id} className="p-4 flex items-center gap-4">
                 <div className="flex-1">
-                  <div className="font-semibold">{t?.full_name ?? "Tenant"}</div>
+                  <div className="font-semibold flex items-center gap-2">
+                    {t?.full_name ?? "Tenant"}
+                    {r.status === "pending_activation" && (
+                      <Badge className="bg-amber-100 text-amber-800 text-xs">Awaiting deposit</Badge>
+                    )}
+                  </div>
                   <div className="text-sm text-muted-foreground">
                     {r.properties?.title}{t?.phone ? ` · ${t.phone}` : ""}
                   </div>

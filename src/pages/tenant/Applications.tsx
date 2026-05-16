@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
 import { DocumentUploader } from "@/components/documents/DocumentUploader";
 import { DocumentList } from "@/components/documents/DocumentList";
 import {
   uploadAppDoc, listAppDocs, deleteAppDoc,
-  APP_DOC_LABEL, INCOME_PROOF_KINDS,
+  APP_DOC_LABEL,
   type AppDoc, type AppDocKind,
 } from "@/lib/documents";
 
@@ -93,8 +93,6 @@ function ApplicationRow({ row, onCancel }: { row: any; onCancel: () => void }) {
   useEffect(() => { if (open) refresh(); }, [open, row.id]);
 
   const has = (k: AppDocKind) => docs.some((d) => d.kind === k);
-  const hasIncome = INCOME_PROOF_KINDS.some(has);
-  const complete = has("cnic") && hasIncome;
   const canUpload = UPLOADABLE_STATUSES.includes(row.status);
 
   return (
@@ -109,15 +107,9 @@ function ApplicationRow({ row, onCancel }: { row: any; onCancel: () => void }) {
           </div>
         </div>
         {canUpload && docsLoaded && (
-          complete ? (
-            <Badge className="bg-emerald-100 text-emerald-800 gap-1">
-              <CheckCircle2 className="h-3 w-3" />Docs complete
-            </Badge>
-          ) : (
-            <Badge className="bg-amber-100 text-amber-800 gap-1">
-              <AlertCircle className="h-3 w-3" />Docs incomplete
-            </Badge>
-          )
+          <Badge variant="secondary" className="gap-1">
+            <CheckCircle2 className="h-3 w-3" />{docs.length} doc{docs.length === 1 ? "" : "s"} shared
+          </Badge>
         )}
         <Badge className={`${STATUS_VARIANT[row.status] ?? "bg-muted"} capitalize`}>
           {row.status.replace("_", " ")}

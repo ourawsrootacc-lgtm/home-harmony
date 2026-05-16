@@ -21,6 +21,9 @@ import {
 import LeaseLifecyclePanel from "@/components/lease/LeaseLifecyclePanel";
 import { DocumentList } from "@/components/documents/DocumentList";
 import { listPropertyDocs, type PropertyDoc } from "@/lib/documents";
+import { SubmitPaymentDialog } from "@/components/payments/SubmitPaymentDialog";
+import { listLeasePayments, type PaymentRow } from "@/lib/payments";
+import { Wallet } from "lucide-react";
 
 const OFFER_STATUSES = ["proposed", "countered"];
 const ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"];
@@ -204,9 +207,23 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
 function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
   const { user } = useAuth();
   const [docs, setDocs] = useState<PropertyDoc[]>([]);
+  const [depositPayments, setDepositPayments] = useState<PaymentRow[]>([]);
+  const [payOpen, setPayOpen] = useState(false);
+
+  const reloadPayments = () => {
+    listLeasePayments(lease.id).then(({ data }) => {
+      setDepositPayments((data ?? []).filter((p: PaymentRow) => p.context === "deposit"));
+    });
+  };
   useEffect(() => {
     if (lease.property_id) listPropertyDocs(lease.property_id).then(setDocs);
-  }, [lease.property_id]);
+    reloadPayments();
+  }, [lease.property_id, lease.id]);
+
+  const isPending = lease.status === "pending_activation";
+  const submittedDeposit = depositPayments.find(
+    (p) => p.status === "submitted" || p.status === "approved",
+  );
 
   return (
     <div className="rounded-xl border bg-card p-6">
@@ -215,8 +232,32 @@ function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
           <div className="font-display text-xl font-semibold">{lease.properties?.title}</div>
           <div className="text-sm text-muted-foreground">{lease.properties?.address}, {lease.properties?.city}</div>
         </div>
-        <Badge className="capitalize bg-emerald-100 text-emerald-800">{lease.status.replace("_", " ")}</Badge>
+        <Badge className={`capitalize ${isPending ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+          {lease.status.replace("_", " ")}
+        </Badge>
       </div>
+
+      {isPending && (
+        <div className="mt-4 rounded-lg border-2 border-amber-300 bg-amber-50 p-4">
+          <div className="flex items-start gap-3">
+            <Wallet className="h-5 w-5 text-amber-700 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold">Pay your security deposit to activate this lease</div>
+              <div className="text-sm text-muted-foreground mt-1">
+                Amount due: <b>{formatPKR(lease.deposit)}</b>. Your lease becomes active the moment your landlord confirms the payment.
+              </div>
+              {submittedDeposit && (
+                <div className="text-xs mt-2">
+                  Deposit submitted {relativeTime(submittedDeposit.created_at)} — waiting for landlord approval.
+                </div>
+              )}
+            </div>
+            {!submittedDeposit && (
+              <Button size="sm" onClick={() => setPayOpen(true)}>Pay deposit</Button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4 mt-4 text-sm">
         <Info label="Rent">{formatPKR(lease.monthly_rent)}/mo</Info>
@@ -240,11 +281,21 @@ function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
         <DocumentList rows={docs} table="property_documents" />
       </div>
 
-      {user && (
+      {user && lease.status === "active" && (
         <div className="mt-6 border-t pt-4">
           <LeaseLifecyclePanel lease={lease} role="tenant" userId={user.id} onChange={onChange} />
         </div>
       )}
+
+      <SubmitPaymentDialog
+        open={payOpen}
+        onOpenChange={setPayOpen}
+        context="deposit"
+        payeeId={lease.landlord_id}
+        leaseId={lease.id}
+        defaultAmount={Number(lease.deposit)}
+        onDone={() => { reloadPayments(); onChange(); }}
+      />
     </div>
   );
 }

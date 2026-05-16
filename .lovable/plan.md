@@ -1,131 +1,76 @@
-# Secure document exchange — Plan
+## What changes
 
-## What we're building
+### Part A — Documents move to the Apply form
 
-Two-way document upload between tenants and landlords, enforced by RLS and signed URLs (same pattern already used for `maintenance-photos`).
+**`src/pages/public/PropertyDetail.tsx`** — replace the simple message-only apply panel with a two-step apply flow:
 
-**Tenant uploads (per application):**
-- CNIC — required
-- Proof of income (payslip *or* bank statement) — required
-- Employment letter — optional
-- Police / security clearance — optional
+1. **Step 1 (always visible):** message textarea + the same uploaders the tenant currently sees post-submit (CNIC, payslip OR bank statement, optional employment letter, optional police clearance). Files are uploaded to a **temporary holding area** (storage path: `applications/_draft/{user_id}/{kind}-{ts}.{ext}`) because the `application_id` does not exist yet.
+2. **Step 2 — "Submit application" button:**
+   - Disabled until **CNIC + (payslip OR bank statement)** are present.
+   - On click: insert the `applications` row → for each draft file, move/copy the storage object to `applications/{newAppId}/{user_id}/...` and insert the corresponding `application_documents` row → cleanup `_draft` folder.
 
-**Landlord uploads (per property):**
-- Ownership proof / title
-- Society NOC letter
+**`src/pages/tenant/Applications.tsx`** — keep the per-row docs panel for **add / replace / delete** after submission (covers the "I forgot to attach my payslip" case), but the panel is no longer the primary upload entry point. Drop the "Docs incomplete" badge logic since submission now guarantees completeness; replace it with a simple "X documents shared" count.
 
-**Visibility rules:**
-- Landlord can see a tenant's docs only after marking the application `under_review` or later (consent-gated).
-- Tenant can see a property's documents only after their application is `approved` or they have an active lease.
-- On application `rejected` or `cancelled` → tenant's docs for that application are **auto-deleted immediately** (storage + row).
+**`src/lib/documents.ts`** — add two helpers:
+- `uploadDraftAppDoc(file, kind)` → writes to `_draft` path, returns `{ path, kind, mime, size }`.
+- `promoteDraftDocs(applicationId, drafts)` → server-side move + `application_documents` insert in a single batch, with rollback on failure.
 
-## User flow
+**Storage RLS** — extend the `can_access_document_path` function so a user can read/write objects under `applications/_draft/{their_uid}/*`. Auto-cleanup: a scheduled `pg_cron` job (or simple `BEFORE INSERT` trigger on `application_documents`) removes `_draft` objects older than 24 h.
 
-**Tenant — Apply page**
-1. Picks property → clicks Apply.
-2. Submit button is disabled until CNIC + one income proof are uploaded.
-3. After approval, a new "Property documents" section appears on their Lease page with ownership/NOC docs from the landlord.
+### Part B — Deposit-gated lease activation
 
-**Landlord — Applications inbox**
-1. New application arrives as `pending`. Documents section shows "Tenant has shared documents. Mark as Under Review to view." (button).
-2. Clicking *Mark under review* flips status → docs become viewable inline (preview via short-lived signed URL, no public link).
-3. Each view writes an audit row so the tenant can see "Landlord viewed your bank statement 2h ago" on their Application detail.
+**`src/lib/lease.ts` — `signCurrentVersion`:**
+When both parties have signed, set `status = 'pending_activation'` **instead of** `active`. Do NOT stamp `activated_at` yet. Then immediately create the deposit payment row:
 
-**Landlord — Listing form**
-- New "Property documents" panel where they upload ownership/NOC once per property.
-
-## Technical design
-
-### Storage
-- Reuse the existing private `documents` bucket.
-- Path conventions:
-  - Tenant: `applications/{application_id}/{tenant_id}/{kind}-{timestamp}.{ext}`
-  - Landlord: `properties/{property_id}/{landlord_id}/{kind}-{timestamp}.{ext}`
-- Storage policies pin the first folder + uploader identity; no public reads.
-- Access always via `createSignedUrl(path, 600)` — 10 min expiry.
-
-### New tables
-
-```text
-application_documents
-  id uuid pk
-  application_id uuid fk -> applications(id) on delete cascade
-  tenant_id uuid fk -> auth.users(id)
-  kind enum: cnic | payslip | bank_statement | employment_letter | police_clearance
-  storage_path text
-  mime text
-  size_bytes int
-  created_at timestamptz
-
-property_documents
-  id uuid pk
-  property_id uuid fk -> properties(id) on delete cascade
-  landlord_id uuid fk -> auth.users(id)
-  kind enum: ownership | society_noc
-  storage_path text
-  mime text
-  size_bytes int
-  created_at timestamptz
-
-document_access_log     -- audit trail
-  id uuid pk
-  document_table text   -- 'application_documents' | 'property_documents'
-  document_id uuid
-  viewer_id uuid
-  viewed_at timestamptz default now()
+```sql
+INSERT INTO payments (context, lease_id, payer_id, payee_id, amount, method, status, ...)
+VALUES ('deposit', lease.id, tenant_id, landlord_id, lease.deposit, 'bank', 'submitted'... )
 ```
 
-### RLS policies (key ones)
+Actually — to match the existing manual-payment flow we should NOT pre-create a `submitted` row (the tenant needs to attach proof). Instead:
+- On both-signed: set `status = 'pending_activation'`, log `awaiting_deposit` event.
+- Surface a prominent "Pay security deposit ({formatPKR(deposit)}) to activate your lease" CTA on the tenant Lease card → opens the existing `SubmitPaymentDialog` pre-filled with `context='deposit'`, `lease_id`, `amount=deposit`, `payee_id=landlord`.
+- Surface a matching "Awaiting tenant deposit" badge on the landlord Lease card.
 
-`application_documents`:
-- `SELECT`: tenant owns the row, OR landlord of the related property AND application.status IN (`under_review`, `offer_sent`, `approved`, `fulfilled`).
-- `INSERT`: only `auth.uid() = tenant_id` AND application belongs to them AND status is `pending`/`under_review`.
-- `DELETE`: tenant owns it, OR a trigger fires on application status change to `rejected`/`cancelled`.
+**New activation trigger** — `supabase/migrations/<ts>_lease_activation.sql`:
 
-`property_documents`:
-- `SELECT`: landlord owns it, OR `auth.uid()` has an `approved`/`fulfilled` application or an `active`/`pending_activation` lease on the property.
-- `INSERT`/`DELETE`: only the property's landlord.
+```sql
+CREATE OR REPLACE FUNCTION public.activate_lease_on_deposit_approval()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.status = 'approved' AND NEW.context = 'deposit'
+     AND (OLD.status IS DISTINCT FROM 'approved') THEN
+    UPDATE public.leases
+       SET status = 'active', activated_at = NOW()
+     WHERE id = NEW.lease_id AND status = 'pending_activation';
+    INSERT INTO public.lease_events (lease_id, kind, payload)
+    VALUES (NEW.lease_id, 'activated', jsonb_build_object('via_payment', NEW.id));
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-`document_access_log`:
-- `INSERT`: any authenticated user (logs their own views).
-- `SELECT`: tenant sees logs for their own docs; landlord sees logs for their property docs.
+CREATE TRIGGER trg_activate_lease_on_deposit
+AFTER UPDATE ON public.payments
+FOR EACH ROW EXECUTE FUNCTION public.activate_lease_on_deposit_approval();
+```
 
-### Auto-purge on rejection
+So the flow is: tenant submits deposit proof → landlord clicks **Approve** in Payments tab → trigger flips lease to `active` and writes the audit event.
 
-Postgres trigger on `applications` AFTER UPDATE: if `NEW.status IN ('rejected','cancelled')` → delete from `application_documents` where `application_id = NEW.id`. A second trigger on `application_documents` BEFORE DELETE calls a helper to also remove the storage object (via `storage.objects` delete in the same transaction, scoped to bucket = `documents`).
+**`src/pages/tenant/Lease.tsx` and `src/pages/landlord/Leases.tsx`:**
+- Add `pending_activation` branch in `ActiveCard` / landlord lease card with the deposit CTA / status copy above.
+- Show `LeaseLifecyclePanel` only for `active`+ statuses (already the case).
 
-### Validation (client + server)
-- Allowed mime: `application/pdf`, `image/jpeg`, `image/png`, `image/webp`.
-- Max size: 10 MB. Enforced in upload helper and as a CHECK on `size_bytes`.
-- Zod schemas mirror the enums for `kind`.
+**`src/pages/landlord/Tenants.tsx`:**
+Keep counting `pending_activation` as "current tenant" (it already is in `ACTIVE_STATUSES`), so the sidebar count stops showing 0 once the lease is signed even if deposit hasn't cleared yet. Add a small "Awaiting deposit" sub-badge.
 
-### Files to add / change
-
-New:
-- `supabase/migrations/<ts>_documents.sql` — tables, enums, RLS, triggers.
-- `src/lib/documents.ts` — `uploadAppDoc`, `uploadPropertyDoc`, `listAppDocs`, `listPropertyDocs`, `getDocSignedUrl`, `logView`, `deleteAppDoc`.
-- `src/components/documents/DocumentUploader.tsx` — generic uploader with `kind` + bucket scope.
-- `src/components/documents/DocumentList.tsx` — preview + signed-url open + view-log badge.
-
-Modify:
-- `src/pages/public/PropertyDetail.tsx` (or wherever Apply lives) — add required uploader section, block submit until required docs present.
-- `src/pages/landlord/Applications.tsx` — new "Documents" panel that unlocks on *Mark under review*.
-- `src/pages/landlord/ListingForm.tsx` — add Property documents panel.
-- `src/pages/tenant/Lease.tsx` — show approved property's documents.
-- `src/pages/tenant/Applications.tsx` — show "landlord viewed X" badges from `document_access_log`.
-
-## Out of scope (explicit)
-- OCR / automatic income parsing.
-- Watermarking previews.
-- Virus scanning (can add later via Edge function).
-- Tenant-side download blocking (we allow download for now; can switch to preview-only later).
+## Out of scope
+- Migration is assumed already applied for `application_documents` / `property_documents` (you confirmed).
+- No changes to OTP signing, escrow, or refund handling.
 
 ## Acceptance criteria
-1. Tenant cannot submit application without CNIC + one income proof.
-2. Landlord sees "documents locked" on `pending`; sees and can preview docs once they click *Mark under review*.
-3. Tenant sees ownership/NOC docs on Lease page once application is approved.
-4. Rejecting an application removes both DB rows and storage objects for that application's docs.
-5. Every doc open writes to `document_access_log` and shows up on tenant's app detail.
-6. All file access uses signed URLs ≤10 min; no public storage URLs exist.
-
-Approve to proceed, or tell me what to tweak (e.g., add tenant rental history as a required doc, change purge window, add watermarking).
+1. On `/properties/:id`, the **Apply** button is disabled until CNIC + one income proof are attached; submission creates the application AND the document rows atomically.
+2. Tenant Applications page still allows replacing/adding docs after submission (no badge needed).
+3. After both parties sign, lease status is `pending_activation` (NOT `active`); `activated_at` is null.
+4. Tenant Lease page shows "Pay security deposit to activate" CTA; clicking it opens SubmitPaymentDialog pre-filled with `context=deposit, amount=lease.deposit`.
+5. When the landlord approves that deposit payment, the lease flips to `active` and a `lease_events` row of kind `activated` is written.
+6. Landlord Tenants tab shows the tenant immediately when the lease is `pending_activation`, with an "Awaiting deposit" sub-badge that disappears on activation.
