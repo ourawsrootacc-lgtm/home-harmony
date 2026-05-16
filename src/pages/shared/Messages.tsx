@@ -8,7 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
-import { Send, FileText } from "lucide-react";
+import { Send, FileText, Image as ImageIcon, Paperclip, X } from "lucide-react";
+import {
+  uploadMessageAttachment, classifyFile, validateFile, formatFileSize,
+  type UploadedAttachment,
+} from "@/lib/messageAttachments";
+import { ImageBubble, FileBubble } from "@/components/messages/MessageAttachment";
 
 type Msg = {
   id: string;
@@ -17,6 +22,11 @@ type Msg = {
   body: string;
   read_at: string | null;
   created_at: string;
+  kind?: "text" | "image" | "file";
+  attachment_path?: string | null;
+  attachment_name?: string | null;
+  attachment_size?: number | null;
+  attachment_mime?: string | null;
 };
 
 type Counterparty = {
