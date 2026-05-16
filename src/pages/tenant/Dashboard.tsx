@@ -5,25 +5,23 @@ import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader } from "@/components/feedback/Feedback";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Heart, FileText, Wrench } from "lucide-react";
+import { Heart, FileText } from "lucide-react";
 
 export default function TenantDashboard() {
   const { user, profile } = useAuth();
-  const [stats, setStats] = useState({ favorites: 0, applications: 0, tickets: 0 });
+  const [stats, setStats] = useState({ favorites: 0, applications: 0 });
 
   useEffect(() => {
     if (!user) return;
     Promise.all([
       supabase.from("favorites").select("*", { count: "exact", head: true }).eq("user_id", user.id),
       supabase.from("applications").select("*", { count: "exact", head: true }).eq("tenant_id", user.id),
-      supabase.from("maintenance_tickets").select("*", { count: "exact", head: true }).eq("tenant_id", user.id),
-    ]).then(([f, a, t]) => setStats({ favorites: f.count ?? 0, applications: a.count ?? 0, tickets: t.count ?? 0 }));
+    ]).then(([f, a]) => setStats({ favorites: f.count ?? 0, applications: a.count ?? 0 }));
   }, [user]);
 
   const cards = [
     { label: "Favorites", value: stats.favorites, icon: Heart, to: "/app/tenant/favorites" },
     { label: "Applications", value: stats.applications, icon: FileText, to: "/app/tenant/applications" },
-    { label: "Maintenance tickets", value: stats.tickets, icon: Wrench, to: "/app/tenant/maintenance" },
   ];
 
   return (
