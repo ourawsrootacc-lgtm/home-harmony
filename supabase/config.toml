@@ -1,0 +1,9 @@
+# Minimal Supabase config so the CLI can `link` and `db push`.
+# Replace project_id with your real ref after running `supabase link`.
+project_id = "your-project-ref"
+
+[db]
+# Local Postgres port if you ever run `supabase start` locally (optional).
+port = 54322
+shadow_port = 54320
+major_version = 15
