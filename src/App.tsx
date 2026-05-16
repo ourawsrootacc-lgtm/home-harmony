@@ -23,6 +23,7 @@ import LandlordListings from "@/pages/landlord/Listings";
 import LandlordListingForm from "@/pages/landlord/ListingForm";
 import LandlordApplications from "@/pages/landlord/Applications";
 import LandlordTenants from "@/pages/landlord/Tenants";
+import LandlordLeases from "@/pages/landlord/Leases";
 
 import MaintenanceDashboard from "@/pages/maintenance/Dashboard";
 
