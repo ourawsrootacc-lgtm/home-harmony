@@ -200,16 +200,7 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
 }
 
 function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
-  const endEarly = async () => {
-    const days = lease.notice_period_days ?? 30;
-    if (!confirm(`Request to end this lease early? Per your terms, a ${days}-day notice applies. The property will be released for re-listing.`)) return;
-    try {
-      await terminateLease(lease.id, "tenant_left");
-      toast.success("Lease ended. The property is now available again.");
-      onChange();
-    } catch (e: any) { toast.error(e?.message ?? "Failed to end lease"); }
-  };
-
+  const { user } = useAuth();
   return (
     <div className="rounded-xl border bg-card p-6">
       <div className="flex items-start justify-between gap-3">
@@ -235,8 +226,13 @@ function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
             <MessageSquare className="h-4 w-4 mr-1" />Message landlord
           </Link>
         </Button>
-        <Button size="sm" variant="outline" onClick={endEarly}>Request to end lease early</Button>
       </div>
+
+      {user && (
+        <div className="mt-6 border-t pt-4">
+          <LeaseLifecyclePanel lease={lease} role="tenant" userId={user.id} onChange={onChange} />
+        </div>
+      )}
     </div>
   );
 }
