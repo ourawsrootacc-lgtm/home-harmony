@@ -104,6 +104,15 @@ export default function TenantMaintenance() {
               {errors.description && <p className="text-xs text-destructive mt-1">{errors.description.message}</p>}
             </div>
             <div className="sm:col-span-2">
+              <Label>Issue photos (required)</Label>
+              <input type="file" accept="image/*" multiple
+                onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
+                className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:opacity-90" />
+              {photos.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{photos.length} photo(s) selected</p>
+              )}
+            </div>
+            <div className="sm:col-span-2">
               <Button disabled={isSubmitting}>Submit ticket</Button>
             </div>
           </form>
