@@ -301,7 +301,13 @@ export default function Messages() {
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-muted-foreground truncate flex-1">
-                          {placeholder ? "No messages yet" : t.last.body}
+                          {placeholder
+                            ? "No messages yet"
+                            : t.last.kind === "image"
+                              ? "📷 Photo"
+                              : t.last.kind === "file"
+                                ? `📎 ${t.last.attachment_name ?? "File"}`
+                                : t.last.body}
                         </span>
                         {t.unread > 0 && (
                           <Badge className="bg-primary text-primary-foreground">{t.unread}</Badge>
@@ -356,6 +362,8 @@ export default function Messages() {
                 ) : (
                   activeMessages.map((m) => {
                     const mine = m.sender_id === user?.id;
+                    const isImage = m.kind === "image" && m.attachment_path;
+                    const isFile = m.kind === "file" && m.attachment_path;
                     return (
                       <div
                         key={m.id}
@@ -365,7 +373,22 @@ export default function Messages() {
                             : "bg-card border"
                         }`}
                       >
-                        <div className="whitespace-pre-line">{m.body}</div>
+                        {isImage && (
+                          <ImageBubble path={m.attachment_path!} name={m.attachment_name ?? null} />
+                        )}
+                        {isFile && (
+                          <FileBubble
+                            path={m.attachment_path!}
+                            name={m.attachment_name ?? null}
+                            size={m.attachment_size ?? null}
+                            mine={mine}
+                          />
+                        )}
+                        {m.body && (
+                          <div className={`whitespace-pre-line ${isImage || isFile ? "mt-1" : ""}`}>
+                            {m.body}
+                          </div>
+                        )}
                         <div className="text-[10px] opacity-70 mt-1 text-right">
                           {relativeTime(m.created_at)}
                           {mine && m.read_at ? " · read" : ""}
