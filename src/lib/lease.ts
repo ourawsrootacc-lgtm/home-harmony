@@ -195,6 +195,7 @@ export async function counterOffer(args: {
     .eq("id", args.leaseId);
 
   await logEvent(args.leaseId, "countered", { version_id: version.id, hash });
+  await logEvent(args.leaseId, "signed", { version_id: version.id, role: proposerRole, auto: true });
   return version;
 }
 
