@@ -173,16 +173,82 @@ export default function PropertyDetail() {
               This property is currently <span className="font-medium capitalize">{p.status}</span> and
               not accepting applications.
             </div>
+          ) : !user ? (
+            <Button className="w-full mt-3" onClick={() => nav("/login")}>Log in to apply</Button>
+          ) : role !== "tenant" ? (
+            <div className="rounded-md bg-muted p-3 text-sm text-muted-foreground">
+              Only tenant accounts can apply to listings.
+            </div>
           ) : (
             <>
               <Textarea placeholder="Message to landlord (optional)…" value={message} onChange={(e) => setMessage(e.target.value)} rows={3} />
-              <Button className="w-full mt-3" onClick={apply} disabled={submitting}>
-                {user ? "Apply now" : "Log in to apply"}
+
+              <div className="mt-4 space-y-2">
+                <div className="text-sm font-medium">Required documents</div>
+                <p className="text-xs text-muted-foreground">
+                  Landlord can only review your application after you share CNIC and one income proof.
+                  Files stay private and are auto-deleted if your application is rejected.
+                </p>
+                {TENANT_KINDS.map((k) => (
+                  <DocSlot key={k} kind={k}
+                    required={k === "cnic" || (INCOME_PROOF_KINDS.includes(k) && !hasIncome && !has(k))}
+                    optional={OPTIONAL_KINDS.includes(k)}
+                    file={drafts.find((d) => d.kind === k)?.file ?? null}
+                    onPick={(f) => setDraft(k, f)} />
+                ))}
+              </div>
+
+              {!canSubmit && (
+                <p className="text-xs text-amber-700 mt-3">
+                  {!hasCnic && "Attach your CNIC. "}{!hasIncome && "Attach a payslip or bank statement."}
+                </p>
+              )}
+              <Button className="w-full mt-3" onClick={apply} disabled={!canSubmit}>
+                {submitting ? "Submitting…" : "Submit application"}
               </Button>
             </>
           )}
         </div>
       </aside>
+    </div>
+  );
+}
+
+function DocSlot({ kind, required, optional, file, onPick }: {
+  kind: AppDocKind; required: boolean; optional: boolean;
+  file: File | null; onPick: (f: File | null) => void;
+}) {
+  const id = `doc-${kind}`;
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 text-sm">
+      <div className="min-w-0 flex-1">
+        <div className="font-medium flex items-center gap-1.5">
+          {file && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />}
+          {APP_DOC_LABEL[kind]}
+          {required && !file && <span className="text-destructive text-xs">*</span>}
+          {optional && <span className="text-xs text-muted-foreground">(optional)</span>}
+        </div>
+        {file && <div className="text-xs text-muted-foreground truncate">{file.name}</div>}
+      </div>
+      {file ? (
+        <Button type="button" size="icon" variant="ghost" onClick={() => onPick(null)}>
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      ) : (
+        <>
+          <input id={id} type="file" className="hidden"
+            accept="application/pdf,image/jpeg,image/png,image/webp"
+            onChange={(e) => onPick(e.target.files?.[0] ?? null)} />
+          <Button asChild type="button" size="sm" variant="outline">
+            <label htmlFor={id} className="cursor-pointer">
+              <Upload className="h-3.5 w-3.5 mr-1" />Attach
+            </label>
+          </Button>
+        </>
+      )}
+    </div>
+  );
+}
     </div>
   );
 }
