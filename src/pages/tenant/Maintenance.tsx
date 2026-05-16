@@ -15,6 +15,7 @@ import { relativeTime } from "@/lib/format";
 import { TicketStatusBadge } from "@/components/maintenance/TicketStatusBadge";
 import { TicketDetailDrawer } from "@/components/maintenance/TicketDetailDrawer";
 import { TicketStatus } from "@/lib/maintenance";
+import { uploadAttachment } from "@/lib/maintenanceAttachments";
 
 type FV = z.infer<typeof maintenanceSchema>;
 
@@ -24,6 +25,7 @@ export default function TenantMaintenance() {
   const [lease, setLease] = useState<any>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [funded, setFunded] = useState<"landlord" | "tenant">("landlord");
+  const [photos, setPhotos] = useState<File[]>([]);
   const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<FV>({
     resolver: zodResolver(maintenanceSchema),
     defaultValues: { category: "plumbing", priority: "medium", description: "" },
@@ -43,12 +45,19 @@ export default function TenantMaintenance() {
 
   const onSubmit = async (v: FV) => {
     if (!user || !lease?.property_id) { toast.error("You need an active lease to submit a ticket"); return; }
-    const { error } = await supabase.from("maintenance_tickets").insert({
+    if (photos.length === 0) { toast.error("Please attach at least one photo of the issue"); return; }
+    const { data, error } = await supabase.from("maintenance_tickets").insert({
       tenant_id: user.id, property_id: lease.property_id, ...v,
       status: "submitted", funded_by: funded,
-    });
-    if (error) toast.error(error.message);
-    else { toast.success("Ticket submitted"); reset(); load(); }
+    }).select().single();
+    if (error) { toast.error(error.message); return; }
+    try {
+      for (const f of photos) await uploadAttachment(data.id, f, "issue");
+    } catch (e: any) {
+      toast.error(`Ticket created but photo upload failed: ${e.message}`);
+    }
+    toast.success("Ticket submitted");
+    reset(); setPhotos([]); load();
   };
 
   return (
@@ -93,6 +102,15 @@ export default function TenantMaintenance() {
               <Label>Description</Label>
               <Textarea rows={3} {...register("description")} placeholder="Briefly describe the issue…" />
               {errors.description && <p className="text-xs text-destructive mt-1">{errors.description.message}</p>}
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Issue photos (required)</Label>
+              <input type="file" accept="image/*" multiple
+                onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
+                className="block w-full text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:bg-primary file:text-primary-foreground hover:file:opacity-90" />
+              {photos.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-1">{photos.length} photo(s) selected</p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <Button disabled={isSubmitting}>Submit ticket</Button>
