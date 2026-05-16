@@ -195,11 +195,20 @@ export async function signCurrentVersion(args: {
     .eq("lease_version_id", args.versionId);
   const roles = new Set((sigs ?? []).map((s) => s.role));
   if (roles.has("landlord") && roles.has("tenant")) {
+    // Both parties have signed. Lease enters `pending_activation` and only
+    // becomes `active` after the security-deposit payment is approved
+    // (handled server-side by the trg_activate_lease_on_deposit trigger).
+    // Edge case: zero deposit → activate immediately.
+    const { data: lease } = await supabase
+      .from("leases").select("deposit").eq("id", args.leaseId).single();
+    const depositDue = Number(lease?.deposit ?? 0) > 0;
+    const update = depositDue
+      ? { status: "pending_activation" }
+      : { status: "active", activated_at: new Date().toISOString() };
     const { error: actErr } = await supabase
-      .from("leases")
-      .update({ status: "active", activated_at: new Date().toISOString() })
-      .eq("id", args.leaseId);
+      .from("leases").update(update).eq("id", args.leaseId);
     if (actErr) throw actErr;
+    await logEvent(args.leaseId, depositDue ? "awaiting_deposit" : "activated", {});
   }
 }
 
