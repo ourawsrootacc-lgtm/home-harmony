@@ -46,7 +46,7 @@ export default function Signup() {
       <div className="w-full max-w-md">
         {!isSupabaseConfigured && <ConfigBanner />}
         <h1 className="font-display text-2xl font-bold mb-1">Create your account</h1>
-        <p className="text-sm text-muted-foreground mb-6">Join HomeRentals as a tenant, landlord or maintenance staff.</p>
+        <p className="text-sm text-muted-foreground mb-6">Join HomeRentals as a tenant or landlord.</p>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
           <div>
             <Label>Full name</Label>
@@ -80,7 +80,7 @@ export default function Signup() {
               <SelectContent>
                 <SelectItem value="tenant">Tenant — looking for a home</SelectItem>
                 <SelectItem value="landlord">Landlord — listing properties</SelectItem>
-                <SelectItem value="maintenance">Maintenance staff</SelectItem>
+                
               </SelectContent>
             </Select>
           </div>

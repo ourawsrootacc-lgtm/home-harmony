@@ -18,7 +18,7 @@ export const signupSchema = z.object({
   password: z.string().min(8, "Minimum 8 characters"),
   phone: phoneSchema,
   cnic: cnicSchema.optional().or(z.literal("")),
-  role: z.enum(["tenant", "landlord", "maintenance"]),
+  role: z.enum(["tenant", "landlord"]),
 });
 
 export const loginSchema = z.object({
