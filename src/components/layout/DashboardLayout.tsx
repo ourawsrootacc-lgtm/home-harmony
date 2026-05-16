@@ -1,7 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Home, LayoutDashboard, Building2, Heart, FileText, Wrench, Users,
-  ShieldCheck, MessageSquare, Bell, Settings, LogOut, UserCircle,
+  ShieldCheck, MessageSquare, Bell, Settings, LogOut, UserCircle, CreditCard, UserCog,
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ const NAV: Record<string, Item[]> = {
     { to: "/app/tenant/applications", label: "Applications", icon: FileText },
     { to: "/app/tenant/lease", label: "My Lease", icon: Building2 },
     { to: "/app/tenant/maintenance", label: "Maintenance", icon: Wrench },
+    { to: "/app/tenant/payments", label: "Payments", icon: CreditCard },
   ],
   landlord: [
     { to: "/app/landlord", label: "Overview", icon: LayoutDashboard },
@@ -23,9 +24,12 @@ const NAV: Record<string, Item[]> = {
     { to: "/app/landlord/applications", label: "Applications", icon: FileText },
     { to: "/app/landlord/leases", label: "Leases", icon: FileText },
     { to: "/app/landlord/tenants", label: "Tenants", icon: Users },
+    { to: "/app/landlord/maintenance", label: "Maintenance", icon: Wrench },
+    { to: "/app/landlord/payments", label: "Payments", icon: CreditCard },
   ],
   maintenance: [
-    { to: "/app/maintenance", label: "Tickets", icon: Wrench },
+    { to: "/app/maintenance", label: "Jobs", icon: Wrench },
+    { to: "/app/maintenance/profile", label: "Profile", icon: UserCog },
   ],
   admin: [
     { to: "/app/admin", label: "Overview", icon: LayoutDashboard },

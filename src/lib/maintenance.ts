@@ -326,3 +326,63 @@ export async function findDispatchableTechnicians(opts: { city?: string; skill?:
   });
   return { data: filtered, error: null };
 }
+
+// ---- Action permissions per role -----------------------------------------
+
+export interface TicketActions {
+  triage?: boolean;
+  dispatch?: boolean;
+  submitQuote?: boolean;
+  acceptQuote?: boolean;
+  counterQuote?: boolean;
+  checkIn?: boolean;
+  markWorkDone?: boolean;
+  verify?: boolean;
+  close?: boolean;
+  cancel?: boolean;
+  dispute?: boolean;
+  review?: boolean;
+  pay?: boolean;
+}
+
+export function allowedActions(
+  ticket: { status: TicketStatus; funded_by?: "landlord" | "tenant" },
+  role: "tenant" | "landlord" | "technician" | "admin"
+): TicketActions {
+  const s = ticket.status;
+  const terminal = s === "closed" || s === "cancelled";
+  if (terminal) {
+    return { review: s === "closed" && (role === "tenant" || role === "technician" || role === "landlord") };
+  }
+  const a: TicketActions = {};
+  if (role === "landlord") {
+    if (s === "submitted" || s === "open") { a.triage = true; a.dispatch = true; }
+    if (s === "triaged") a.dispatch = true;
+    if (s === "quoted" && ticket.funded_by === "landlord") a.acceptQuote = true;
+    if (s === "quoted") a.counterQuote = true;
+    if (s === "tenant_verified" && ticket.funded_by === "landlord") a.pay = true;
+    if (["dispatched","quoted","scheduled","in_progress","work_done","tenant_verified"].includes(s)) {
+      a.cancel = true; a.dispute = true;
+    }
+    if (s === "tenant_verified") a.close = true;
+  }
+  if (role === "tenant") {
+    if (s === "quoted" && ticket.funded_by === "tenant") a.acceptQuote = true;
+    if (s === "quoted") a.counterQuote = true;
+    if (s === "work_done") a.verify = true;
+    if (s === "tenant_verified" && ticket.funded_by === "tenant") a.pay = true;
+    if (["submitted","dispatched","quoted","scheduled"].includes(s)) a.cancel = true;
+    if (["scheduled","in_progress","work_done"].includes(s)) a.dispute = true;
+  }
+  if (role === "technician") {
+    if (s === "dispatched") a.submitQuote = true;
+    if (s === "quoted" || s === "counter_quote") a.counterQuote = true;
+    if (s === "scheduled") a.checkIn = true;
+    if (s === "in_progress") a.markWorkDone = true;
+    if (["scheduled","in_progress"].includes(s)) { a.cancel = true; a.dispute = true; }
+  }
+  if (role === "admin") {
+    a.cancel = true; a.close = true; a.dispute = true;
+  }
+  return a;
+}

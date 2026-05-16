@@ -5,29 +5,25 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader, EmptyState } from "@/components/feedback/Feedback";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { maintenanceSchema } from "@/lib/validators";
 import { z } from "zod";
 import { toast } from "sonner";
 import { relativeTime } from "@/lib/format";
+import { TicketStatusBadge } from "@/components/maintenance/TicketStatusBadge";
+import { TicketDetailDrawer } from "@/components/maintenance/TicketDetailDrawer";
+import { TicketStatus } from "@/lib/maintenance";
 
 type FV = z.infer<typeof maintenanceSchema>;
-
-const STATUS_VARIANT: Record<string, string> = {
-  open: "bg-amber-100 text-amber-800",
-  in_progress: "bg-blue-100 text-blue-800",
-  resolved: "bg-emerald-100 text-emerald-800",
-  closed: "bg-muted text-muted-foreground",
-};
 
 export default function TenantMaintenance() {
   const { user } = useAuth();
   const [tickets, setTickets] = useState<any[]>([]);
   const [lease, setLease] = useState<any>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [funded, setFunded] = useState<"landlord" | "tenant">("landlord");
   const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<FV>({
     resolver: zodResolver(maintenanceSchema),
     defaultValues: { category: "plumbing", priority: "medium", description: "" },
@@ -36,7 +32,9 @@ export default function TenantMaintenance() {
 
   const load = () => {
     if (!user) return;
-    supabase.from("maintenance_tickets").select("*, properties(title)").eq("tenant_id", user.id).order("created_at", { ascending: false })
+    supabase.from("maintenance_tickets")
+      .select("*, properties(title)").eq("tenant_id", user.id)
+      .order("created_at", { ascending: false })
       .then(({ data }) => setTickets(data ?? []));
     supabase.from("leases").select("property_id").eq("tenant_id", user.id).eq("status", "active").maybeSingle()
       .then(({ data }) => setLease(data));
@@ -46,7 +44,8 @@ export default function TenantMaintenance() {
   const onSubmit = async (v: FV) => {
     if (!user || !lease?.property_id) { toast.error("You need an active lease to submit a ticket"); return; }
     const { error } = await supabase.from("maintenance_tickets").insert({
-      tenant_id: user.id, property_id: lease.property_id, ...v, status: "open",
+      tenant_id: user.id, property_id: lease.property_id, ...v,
+      status: "submitted", funded_by: funded,
     });
     if (error) toast.error(error.message);
     else { toast.success("Ticket submitted"); reset(); load(); }
@@ -55,7 +54,7 @@ export default function TenantMaintenance() {
   return (
     <div className="space-y-8">
       <div>
-        <PageHeader title="Maintenance" description="Report issues and track repair progress." />
+        <PageHeader title="Maintenance" description="Report issues, negotiate quotes, and verify completed work." />
         {!lease ? (
           <EmptyState title="You need an active lease" description="Once a landlord activates your lease, you can submit maintenance tickets." />
         ) : (
@@ -65,7 +64,8 @@ export default function TenantMaintenance() {
               <Select value={cat} onValueChange={(v) => setValue("category", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["plumbing","electrical","appliance","structural","other"].map(c => <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
+                  {["plumbing","electrical","appliance","structural","other"].map(c =>
+                    <SelectItem key={c} value={c} className="capitalize">{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -74,7 +74,18 @@ export default function TenantMaintenance() {
               <Select value={pri} onValueChange={(v) => setValue("priority", v as any)}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {["low","medium","high"].map(p => <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
+                  {["low","medium","high"].map(p =>
+                    <SelectItem key={p} value={p} className="capitalize">{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="sm:col-span-2">
+              <Label>Funded by</Label>
+              <Select value={funded} onValueChange={(v) => setFunded(v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="landlord">Landlord (normal repair)</SelectItem>
+                  <SelectItem value="tenant">Tenant (my request / my damage)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -97,18 +108,21 @@ export default function TenantMaintenance() {
         ) : (
           <div className="space-y-3">
             {tickets.map((t) => (
-              <div key={t.id} className="rounded-xl border bg-card p-4 flex items-center gap-4">
+              <button key={t.id} onClick={() => setOpenId(t.id)}
+                className="w-full text-left rounded-xl border bg-card p-4 flex items-center gap-4 hover:bg-muted/40 transition">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium capitalize">{t.category} · <span className="text-muted-foreground font-normal">{t.properties?.title}</span></div>
                   <div className="text-sm text-muted-foreground line-clamp-1">{t.description}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Submitted {relativeTime(t.created_at)} · priority {t.priority}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">Submitted {relativeTime(t.created_at)} · priority {t.priority} · funded by {t.funded_by}</div>
                 </div>
-                <Badge className={`${STATUS_VARIANT[t.status]} capitalize`}>{t.status.replace("_"," ")}</Badge>
-              </div>
+                <TicketStatusBadge status={t.status as TicketStatus} />
+              </button>
             ))}
           </div>
         )}
       </div>
+
+      <TicketDetailDrawer ticketId={openId} role="tenant" onOpenChange={(v) => { if (!v) { setOpenId(null); load(); } }} />
     </div>
   );
 }
