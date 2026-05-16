@@ -8,7 +8,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
-import { Send, FileText } from "lucide-react";
+import { Send, FileText, Image as ImageIcon, Paperclip, X } from "lucide-react";
+import {
+  uploadMessageAttachment, classifyFile, validateFile, formatFileSize,
+  type UploadedAttachment,
+} from "@/lib/messageAttachments";
+import { ImageBubble, FileBubble } from "@/components/messages/MessageAttachment";
 
 type Msg = {
   id: string;
@@ -17,6 +22,11 @@ type Msg = {
   body: string;
   read_at: string | null;
   created_at: string;
+  kind?: "text" | "image" | "file";
+  attachment_path?: string | null;
+  attachment_name?: string | null;
+  attachment_size?: number | null;
+  attachment_mime?: string | null;
 };
 
 type Counterparty = {
@@ -182,21 +192,64 @@ export default function Messages() {
       });
   }, [activeMessages, active, user]);
 
-  const send = async () => {
-    if (!user || !active || !body.trim()) return;
-    setSending(true);
-    const { data, error } = await supabase
-      .from("messages")
-      .insert({ sender_id: user.id, recipient_id: active, body: body.trim() })
-      .select()
-      .single();
-    setSending(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+  const [pending, setPending] = useState<File[]>([]);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const addFiles = (list: FileList | null) => {
+    if (!list) return;
+    const next: File[] = [];
+    for (const f of Array.from(list)) {
+      try { validateFile(f); next.push(f); }
+      catch (e: any) { toast.error(e?.message ?? "Invalid file"); }
     }
-    setBody("");
+    if (next.length) setPending((prev) => [...prev, ...next]);
+  };
+
+  const removePending = (i: number) =>
+    setPending((prev) => prev.filter((_, idx) => idx !== i));
+
+  const insertMessage = async (row: Partial<Msg> & { sender_id: string; recipient_id: string }) => {
+    const { data, error } = await supabase.from("messages").insert(row).select().single();
+    if (error) throw error;
     if (data) setMessages((prev) => (prev.some((x) => x.id === data.id) ? prev : [...prev, data as Msg]));
+  };
+
+  const send = async () => {
+    if (!user || !active) return;
+    if (!body.trim() && pending.length === 0) return;
+    setSending(true);
+    try {
+      // Upload + insert one row per attachment.
+      for (const file of pending) {
+        const up: UploadedAttachment = await uploadMessageAttachment(file);
+        await insertMessage({
+          sender_id: user.id,
+          recipient_id: active,
+          body: "",
+          kind: classifyFile(file),
+          attachment_path: up.path,
+          attachment_name: up.name,
+          attachment_size: up.size,
+          attachment_mime: up.mime,
+        } as any);
+      }
+      // Text message goes last so it appears below the attachments.
+      if (body.trim()) {
+        await insertMessage({
+          sender_id: user.id,
+          recipient_id: active,
+          body: body.trim(),
+          kind: "text",
+        } as any);
+      }
+      setBody("");
+      setPending([]);
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to send");
+    } finally {
+      setSending(false);
+    }
   };
 
   const selectThread = (id: string) => {
@@ -248,7 +301,13 @@ export default function Messages() {
                       </div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-xs text-muted-foreground truncate flex-1">
-                          {placeholder ? "No messages yet" : t.last.body}
+                          {placeholder
+                            ? "No messages yet"
+                            : t.last.kind === "image"
+                              ? "📷 Photo"
+                              : t.last.kind === "file"
+                                ? `📎 ${t.last.attachment_name ?? "File"}`
+                                : t.last.body}
                         </span>
                         {t.unread > 0 && (
                           <Badge className="bg-primary text-primary-foreground">{t.unread}</Badge>
@@ -303,6 +362,8 @@ export default function Messages() {
                 ) : (
                   activeMessages.map((m) => {
                     const mine = m.sender_id === user?.id;
+                    const isImage = m.kind === "image" && m.attachment_path;
+                    const isFile = m.kind === "file" && m.attachment_path;
                     return (
                       <div
                         key={m.id}
@@ -312,7 +373,22 @@ export default function Messages() {
                             : "bg-card border"
                         }`}
                       >
-                        <div className="whitespace-pre-line">{m.body}</div>
+                        {isImage && (
+                          <ImageBubble path={m.attachment_path!} name={m.attachment_name ?? null} />
+                        )}
+                        {isFile && (
+                          <FileBubble
+                            path={m.attachment_path!}
+                            name={m.attachment_name ?? null}
+                            size={m.attachment_size ?? null}
+                            mine={mine}
+                          />
+                        )}
+                        {m.body && (
+                          <div className={`whitespace-pre-line ${isImage || isFile ? "mt-1" : ""}`}>
+                            {m.body}
+                          </div>
+                        )}
                         <div className="text-[10px] opacity-70 mt-1 text-right">
                           {relativeTime(m.created_at)}
                           {mine && m.read_at ? " · read" : ""}
@@ -323,24 +399,90 @@ export default function Messages() {
                 )}
               </div>
 
-              <div className="border-t p-3 flex gap-2 items-end bg-card">
-                <Textarea
-                  rows={2}
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  placeholder="Write a message…"
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      send();
-                    }
-                  }}
-                  className="resize-none"
-                />
-                <Button onClick={send} disabled={sending || !body.trim()}>
-                  <Send className="h-4 w-4 mr-1" />
-                  Send
-                </Button>
+              <div className="border-t bg-card">
+                {pending.length > 0 && (
+                  <div className="px-3 pt-3 flex flex-wrap gap-2">
+                    {pending.map((f, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-2 rounded-full border bg-muted/40 pl-3 pr-1 py-1 text-xs max-w-[240px]"
+                      >
+                        {f.type.startsWith("image/") ? (
+                          <ImageIcon className="h-3.5 w-3.5 shrink-0" />
+                        ) : (
+                          <Paperclip className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                        <span className="truncate">{f.name}</span>
+                        <span className="opacity-60 shrink-0">{formatFileSize(f.size)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removePending(i)}
+                          className="rounded-full p-1 hover:bg-background"
+                          aria-label={`Remove ${f.name}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="p-3 flex gap-2 items-end">
+                  <div className="flex flex-col gap-1">
+                    <input
+                      ref={imageInputRef}
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+                    />
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      className="hidden"
+                      onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+                    />
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => imageInputRef.current?.click()}
+                      aria-label="Attach image"
+                    >
+                      <ImageIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      aria-label="Attach file"
+                    >
+                      <Paperclip className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <Textarea
+                    rows={2}
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Write a message…"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        send();
+                      }
+                    }}
+                    className="resize-none"
+                  />
+                  <Button
+                    onClick={send}
+                    disabled={sending || (!body.trim() && pending.length === 0)}
+                  >
+                    <Send className="h-4 w-4 mr-1" />
+                    {sending ? "Sending…" : "Send"}
+                  </Button>
+                </div>
               </div>
             </>
           )}
