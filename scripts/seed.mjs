@@ -46,6 +46,18 @@ const PROPERTIES = (landlord_id) => [
     type: "house", bedrooms: 4, bathrooms: 4, area_sqft: 3200, monthly_rent: 220000, deposit: 440000,
     lat: 33.6900, lng: 73.1610, is_verified: true,
     description: "Luxury villa with private lawn, modular kitchen, and 24/7 security." },
+  { title: "Family home in Hayatabad", city: "Peshawar", address: "Phase 3, Hayatabad",
+    type: "house", bedrooms: 3, bathrooms: 2, area_sqft: 1800, monthly_rent: 70000, deposit: 140000,
+    lat: 33.9920, lng: 71.4380, is_verified: true,
+    description: "Quiet residential street, dedicated parking, gas and water available." },
+  { title: "Apartment in Jinnah Town", city: "Quetta", address: "Jinnah Town",
+    type: "apartment", bedrooms: 2, bathrooms: 1, area_sqft: 950, monthly_rent: 45000, deposit: 90000,
+    lat: 30.1830, lng: 67.0010, is_verified: false,
+    description: "Affordable two-bedroom close to markets and main roads." },
+].map(p => ({ ...p, landlord_id, status: "active" }));
+
+const upsertUser = async ({ email, full_name, phone, role }) => {
+  // try create; if exists, fetch
   const { data: created, error } = await sb.auth.admin.createUser({
     email, password: PWD, email_confirm: true,
     user_metadata: { full_name, phone, role },
