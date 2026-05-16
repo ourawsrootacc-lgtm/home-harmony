@@ -171,14 +171,16 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
       </div>
 
       <div className="flex flex-wrap gap-2 mt-4">
+        {!proposedByMe && !tenantSigned && <Button size="sm" onClick={sign}>Accept &amp; sign</Button>}
         <Button asChild variant="outline" size="sm">
           <Link to={`/app/messages?to=${lease.landlord_id}`}>
             <MessageSquare className="h-4 w-4 mr-1" />Message landlord
           </Link>
         </Button>
-        {!proposedByMe && !tenantSigned && <Button size="sm" onClick={sign}>Accept & sign</Button>}
-        {!proposedByMe && <Button size="sm" variant="outline" onClick={() => setCounterOpen(true)}>Counter</Button>}
-        {!tenantSigned && <Button size="sm" variant="outline" onClick={decline}>Decline</Button>}
+        {!tenantSigned && <Button size="sm" variant="ghost" onClick={decline}>Decline</Button>}
+        {!proposedByMe && (
+          <Button size="sm" variant="ghost" onClick={() => setCounterOpen(true)}>Counter</Button>
+        )}
         {proposedByMe && !landlordSigned && (
           <span className="text-xs text-muted-foreground self-center">Waiting for landlord's response.</span>
         )}
