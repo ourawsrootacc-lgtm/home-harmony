@@ -15,6 +15,7 @@ import { relativeTime } from "@/lib/format";
 import { TicketStatusBadge } from "@/components/maintenance/TicketStatusBadge";
 import { TicketDetailDrawer } from "@/components/maintenance/TicketDetailDrawer";
 import { TicketStatus } from "@/lib/maintenance";
+import { uploadAttachment } from "@/lib/maintenanceAttachments";
 
 type FV = z.infer<typeof maintenanceSchema>;
 
@@ -24,6 +25,7 @@ export default function TenantMaintenance() {
   const [lease, setLease] = useState<any>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [funded, setFunded] = useState<"landlord" | "tenant">("landlord");
+  const [photos, setPhotos] = useState<File[]>([]);
   const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<FV>({
     resolver: zodResolver(maintenanceSchema),
     defaultValues: { category: "plumbing", priority: "medium", description: "" },
