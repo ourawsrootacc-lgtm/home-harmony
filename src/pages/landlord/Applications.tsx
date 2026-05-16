@@ -168,9 +168,11 @@ function ApplicationRow({ row, onReject, onOpenOffer }: { row: any; onReject: ()
           </>
         )}
         {row.status === "offer_sent" && (
-          <span className="text-xs text-muted-foreground self-center">
-            Offer sent — waiting on tenant. Manage from My leases.
-          </span>
+          <Button asChild size="sm" variant="outline">
+            <Link to="/app/landlord/leases">
+              <FileText className="h-4 w-4 mr-1" />Manage in Leases
+            </Link>
+          </Button>
         )}
       </div>
     </div>
