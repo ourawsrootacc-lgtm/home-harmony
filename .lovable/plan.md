@@ -1,76 +1,46 @@
-## What changes
+# Fix: lease stuck in "Sent offers" after both parties effectively agreed
 
-### Part A — Documents move to the Apply form
+## Root cause
 
-**`src/pages/public/PropertyDetail.tsx`** — replace the simple message-only apply panel with a two-step apply flow:
+The screenshot shows `You signed: — · Tenant signed: ✓` with status `Proposed`. The landlord sent the offer, the tenant signed it, but the landlord has no way to sign:
 
-1. **Step 1 (always visible):** message textarea + the same uploaders the tenant currently sees post-submit (CNIC, payslip OR bank statement, optional employment letter, optional police clearance). Files are uploaded to a **temporary holding area** (storage path: `applications/_draft/{user_id}/{kind}-{ts}.{ext}`) because the `application_id` does not exist yet.
-2. **Step 2 — "Submit application" button:**
-   - Disabled until **CNIC + (payslip OR bank statement)** are present.
-   - On click: insert the `applications` row → for each draft file, move/copy the storage object to `applications/{newAppId}/{user_id}/...` and insert the corresponding `application_documents` row → cleanup `_draft` folder.
+- `src/pages/landlord/Leases.tsx` (OfferCard, line 202):
+  `{!proposedByMe && !landlordSigned && <Button>Accept & sign</Button>}`
+  Because the landlord proposed it, `proposedByMe` is true → button hidden.
+- `signCurrentVersion` only flips status when BOTH `landlord` and `tenant` signatures exist for the current version. The proposer's signature is never written anywhere, so the lease never activates (or even reaches `pending_activation`).
 
-**`src/pages/tenant/Applications.tsx`** — keep the per-row docs panel for **add / replace / delete** after submission (covers the "I forgot to attach my payslip" case), but the panel is no longer the primary upload entry point. Drop the "Docs incomplete" badge logic since submission now guarantees completeness; replace it with a simple "X documents shared" count.
+Same bug on the tenant side when a tenant counters and the landlord then signs.
 
-**`src/lib/documents.ts`** — add two helpers:
-- `uploadDraftAppDoc(file, kind)` → writes to `_draft` path, returns `{ path, kind, mime, size }`.
-- `promoteDraftDocs(applicationId, drafts)` → server-side move + `application_documents` insert in a single batch, with rollback on failure.
+## Fix (pick one — recommended: Option A)
 
-**Storage RLS** — extend the `can_access_document_path` function so a user can read/write objects under `applications/_draft/{their_uid}/*`. Auto-cleanup: a scheduled `pg_cron` job (or simple `BEFORE INSERT` trigger on `application_documents`) removes `_draft` objects older than 24 h.
+### Option A — Proposer signs automatically on send (recommended)
+The act of sending/countering an offer is the proposer's signature on that version (this is how DocuSign-style "send" flows work, and it matches the UI copy "Once both parties sign the current version, the lease activates automatically").
 
-### Part B — Deposit-gated lease activation
+- `src/lib/lease.ts`
+  - In `sendInitialOffer`: after inserting the version, also insert a `lease_signatures` row for the landlord on that version and stamp `leases.landlord_signed_at`.
+  - In `counterOffer`: after inserting the new version, insert a `lease_signatures` row for `proposedBy` (role inferred from whether `proposedBy === lease.landlord_id`) and stamp the matching `*_signed_at`.
+  - No change needed to `signCurrentVersion` — it already activates / moves to `pending_activation` once both signatures exist.
 
-**`src/lib/lease.ts` — `signCurrentVersion`:**
-When both parties have signed, set `status = 'pending_activation'` **instead of** `active`. Do NOT stamp `activated_at` yet. Then immediately create the deposit payment row:
+- `src/pages/landlord/Leases.tsx` (OfferCard)
+  - Remove `!proposedByMe` from the sign-button condition so it reads `{!landlordSigned && <Button>Accept & sign</Button>}`. This is a safety net in case any historical lease is missing the proposer signature.
+  - Update the "Waiting for tenant…" hint to also cover the case where landlord has signed but tenant hasn't.
 
-```sql
-INSERT INTO payments (context, lease_id, payer_id, payee_id, amount, method, status, ...)
-VALUES ('deposit', lease.id, tenant_id, landlord_id, lease.deposit, 'bank', 'submitted'... )
-```
+- `src/pages/tenant/Lease.tsx` (mirror fix)
+  - Same: drop the `!proposedByMe` gate on the tenant-side sign button so a tenant who countered can still confirm if needed.
 
-Actually — to match the existing manual-payment flow we should NOT pre-create a `submitted` row (the tenant needs to attach proof). Instead:
-- On both-signed: set `status = 'pending_activation'`, log `awaiting_deposit` event.
-- Surface a prominent "Pay security deposit ({formatPKR(deposit)}) to activate your lease" CTA on the tenant Lease card → opens the existing `SubmitPaymentDialog` pre-filled with `context='deposit'`, `lease_id`, `amount=deposit`, `payee_id=landlord`.
-- Surface a matching "Awaiting tenant deposit" badge on the landlord Lease card.
+### Option B — Keep "send ≠ sign", just expose the button
+Only change the UI: drop `!proposedByMe` from the sign condition on both sides. Landlord/tenant must explicitly click "Sign" even on offers they sent. Safer audit trail, one extra click.
 
-**New activation trigger** — `supabase/migrations/<ts>_lease_activation.sql`:
-
-```sql
-CREATE OR REPLACE FUNCTION public.activate_lease_on_deposit_approval()
-RETURNS TRIGGER AS $$
-BEGIN
-  IF NEW.status = 'approved' AND NEW.context = 'deposit'
-     AND (OLD.status IS DISTINCT FROM 'approved') THEN
-    UPDATE public.leases
-       SET status = 'active', activated_at = NOW()
-     WHERE id = NEW.lease_id AND status = 'pending_activation';
-    INSERT INTO public.lease_events (lease_id, kind, payload)
-    VALUES (NEW.lease_id, 'activated', jsonb_build_object('via_payment', NEW.id));
-  END IF;
-  RETURN NEW;
-END $$ LANGUAGE plpgsql SECURITY DEFINER;
-
-CREATE TRIGGER trg_activate_lease_on_deposit
-AFTER UPDATE ON public.payments
-FOR EACH ROW EXECUTE FUNCTION public.activate_lease_on_deposit_approval();
-```
-
-So the flow is: tenant submits deposit proof → landlord clicks **Approve** in Payments tab → trigger flips lease to `active` and writes the audit event.
-
-**`src/pages/tenant/Lease.tsx` and `src/pages/landlord/Leases.tsx`:**
-- Add `pending_activation` branch in `ActiveCard` / landlord lease card with the deposit CTA / status copy above.
-- Show `LeaseLifecyclePanel` only for `active`+ statuses (already the case).
-
-**`src/pages/landlord/Tenants.tsx`:**
-Keep counting `pending_activation` as "current tenant" (it already is in `ACTIVE_STATUSES`), so the sidebar count stops showing 0 once the lease is signed even if deposit hasn't cleared yet. Add a small "Awaiting deposit" sub-badge.
+## Existing/seeded leases
+For the lease shown in the screenshot (and any others stuck the same way):
+- Option A: a one-off backfill insert into `lease_signatures` for the proposer of each `current_version_id` where the row is missing, then re-run the activation logic. Can be done with a tiny SQL block in the same migration file.
+- Option B: the landlord just clicks the now-visible "Accept & sign" button — no backfill needed.
 
 ## Out of scope
-- Migration is assumed already applied for `application_documents` / `property_documents` (you confirmed).
-- No changes to OTP signing, escrow, or refund handling.
+- No changes to deposit-gated activation (`pending_activation` → `active` via deposit payment trigger) — that part is correct and unrelated.
+- No changes to documents flow.
 
-## Acceptance criteria
-1. On `/properties/:id`, the **Apply** button is disabled until CNIC + one income proof are attached; submission creates the application AND the document rows atomically.
-2. Tenant Applications page still allows replacing/adding docs after submission (no badge needed).
-3. After both parties sign, lease status is `pending_activation` (NOT `active`); `activated_at` is null.
-4. Tenant Lease page shows "Pay security deposit to activate" CTA; clicking it opens SubmitPaymentDialog pre-filled with `context=deposit, amount=lease.deposit`.
-5. When the landlord approves that deposit payment, the lease flips to `active` and a `lease_events` row of kind `activated` is written.
-6. Landlord Tenants tab shows the tenant immediately when the lease is `pending_activation`, with an "Awaiting deposit" sub-badge that disappears on activation.
+## Decision needed
+Which option do you want?
+1. **A — auto-sign on send** (one click for the other party, lease activates immediately on their signature; matches current UI copy).
+2. **B — show the missing button only** (both parties must explicitly click Sign on every version, including ones they sent).
