@@ -16,6 +16,12 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { validateImage } from "@/lib/validators";
 import { ImagePlus, X } from "lucide-react";
+import { DocumentUploader } from "@/components/documents/DocumentUploader";
+import { DocumentList } from "@/components/documents/DocumentList";
+import {
+  uploadPropertyDoc, listPropertyDocs, deletePropertyDoc,
+  PROPERTY_DOC_LABEL, type PropertyDoc, type PropertyDocKind,
+} from "@/lib/documents";
 
 type FV = z.infer<typeof propertySchema>;
 
@@ -32,6 +38,9 @@ export default function LandlordListingForm() {
     defaultValues: { type: "apartment", city: "Karachi", bedrooms: 2, bathrooms: 1, area_sqft: 800, lat: 24.8607, lng: 67.0011, deposit: 0 },
   });
   const type = watch("type"); const city = watch("city");
+  const [propDocs, setPropDocs] = useState<PropertyDoc[]>([]);
+  const refreshDocs = () => { if (id) listPropertyDocs(id).then(setPropDocs); };
+  useEffect(() => { refreshDocs(); }, [id]);
 
   useEffect(() => {
     if (!editing) return;
@@ -147,6 +156,34 @@ export default function LandlordListingForm() {
               </label>
             </div>
             {uploading && <p className="text-xs text-muted-foreground mt-2">Uploading…</p>}
+          </div>
+        )}
+
+        {editing && id && (
+          <div>
+            <Label>Property documents</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Shared with tenants only after you approve their application or activate a lease.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(Object.keys(PROPERTY_DOC_LABEL) as PropertyDocKind[]).map((k) => (
+                <DocumentUploader
+                  key={k}
+                  label={`Upload ${PROPERTY_DOC_LABEL[k]}`}
+                  onPick={async (f) => {
+                    await uploadPropertyDoc(id, f, k);
+                    refreshDocs();
+                  }}
+                />
+              ))}
+            </div>
+            <DocumentList
+              rows={propDocs}
+              table="property_documents"
+              canDelete
+              onDelete={async (docId) => { await deletePropertyDoc(docId); refreshDocs(); }}
+              showViews
+            />
           </div>
         )}
 

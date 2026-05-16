@@ -19,6 +19,8 @@ import {
   signCurrentVersion, counterOffer, declineOffer, LeaseTerms,
 } from "@/lib/lease";
 import LeaseLifecyclePanel from "@/components/lease/LeaseLifecyclePanel";
+import { DocumentList } from "@/components/documents/DocumentList";
+import { listPropertyDocs, type PropertyDoc } from "@/lib/documents";
 
 const OFFER_STATUSES = ["proposed", "countered"];
 const ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"];
@@ -201,6 +203,11 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
 
 function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
   const { user } = useAuth();
+  const [docs, setDocs] = useState<PropertyDoc[]>([]);
+  useEffect(() => {
+    if (lease.property_id) listPropertyDocs(lease.property_id).then(setDocs);
+  }, [lease.property_id]);
+
   return (
     <div className="rounded-xl border bg-card p-6">
       <div className="flex items-start justify-between gap-3">
@@ -226,6 +233,11 @@ function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
             <MessageSquare className="h-4 w-4 mr-1" />Message landlord
           </Link>
         </Button>
+      </div>
+
+      <div className="mt-6 border-t pt-4">
+        <h3 className="text-sm font-semibold mb-2">Property documents</h3>
+        <DocumentList rows={docs} table="property_documents" />
       </div>
 
       {user && (

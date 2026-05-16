@@ -59,7 +59,11 @@ export default function PropertyDetail() {
     });
     setSubmitting(false);
     if (error) toast.error(error.message);
-    else { toast.success("Application submitted"); setMessage(""); }
+    else {
+      toast.success("Application submitted — now upload your documents so the landlord can review.");
+      setMessage("");
+      nav("/app/tenant/applications");
+    }
   };
 
   if (!isSupabaseConfigured) return <div className="container mx-auto px-4 py-8"><ConfigBanner /></div>;
