@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PK_CITIES, PROPERTY_TYPES } from "@/lib/constants";
+import { PK_CITIES, PK_SOCIETIES, PROPERTY_TYPES, sqftToMarlas, type PkCity } from "@/lib/constants";
 import { z } from "zod";
 import { toast } from "sonner";
 import { validateImage } from "@/lib/validators";
@@ -32,12 +32,18 @@ export default function LandlordListingForm() {
   const { user } = useAuth();
   const [images, setImages] = useState<{ id?: string; url: string }[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [societyMode, setSocietyMode] = useState<"preset" | "other">("preset");
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors, isSubmitting } } = useForm<FV>({
     resolver: zodResolver(propertySchema),
-    defaultValues: { type: "apartment", city: "Karachi", bedrooms: 2, bathrooms: 1, area_sqft: 800, lat: 24.8607, lng: 67.0011, deposit: 0 },
+    defaultValues: {
+      type: "apartment", city: "Karachi", society: "",
+      bedrooms: 2, bathrooms: 1, area_marlas: 5,
+      lat: 24.8607, lng: 67.0011, deposit: 0,
+    },
   });
-  const type = watch("type"); const city = watch("city");
+  const type = watch("type"); const city = watch("city") as PkCity; const society = watch("society");
+  const societyOptions = PK_SOCIETIES[city] ?? [];
   const [propDocs, setPropDocs] = useState<PropertyDoc[]>([]);
   const refreshDocs = () => { if (id) listPropertyDocs(id).then(setPropDocs); };
   useEffect(() => { refreshDocs(); }, [id]);
@@ -47,11 +53,15 @@ export default function LandlordListingForm() {
     supabase.from("properties").select("*, property_images(id,url,sort_order)").eq("id", id).maybeSingle()
       .then(({ data }) => {
         if (!data) return;
+        const marlas = data.area_marlas != null ? Number(data.area_marlas) : sqftToMarlas(data.area_sqft);
         reset({
           title: data.title, description: data.description, type: data.type, bedrooms: data.bedrooms,
-          bathrooms: data.bathrooms, area_sqft: data.area_sqft, address: data.address, city: data.city,
+          bathrooms: data.bathrooms, area_marlas: marlas, address: data.address,
+          city: data.city, society: data.society ?? "",
           lat: data.lat, lng: data.lng, monthly_rent: data.monthly_rent, deposit: data.deposit,
         });
+        const opts = PK_SOCIETIES[data.city as PkCity] ?? [];
+        setSocietyMode(data.society && !opts.includes(data.society) ? "other" : "preset");
         setImages((data.property_images ?? []).sort((a: any,b: any) => a.sort_order - b.sort_order));
       });
   }, [id, editing, reset]);
@@ -81,13 +91,14 @@ export default function LandlordListingForm() {
 
   const onSubmit = async (v: FV) => {
     if (!user) return;
+    const payload = { ...v, society: v.society?.trim() || null };
     if (editing) {
-      const { error } = await supabase.from("properties").update({ ...v }).eq("id", id);
+      const { error } = await supabase.from("properties").update(payload).eq("id", id);
       if (error) return toast.error(error.message);
       toast.success("Listing updated"); nav("/app/landlord/listings");
     } else {
       const { data, error } = await supabase.from("properties").insert({
-        ...v, landlord_id: user.id, status: "active",
+        ...payload, landlord_id: user.id, status: "active",
       }).select().single();
       if (error) return toast.error(error.message);
       toast.success("Listing created"); nav(`/app/landlord/listings/${data.id}/edit`);
@@ -118,14 +129,45 @@ export default function LandlordListingForm() {
           </div>
           <div>
             <Label>City</Label>
-            <Select value={city} onValueChange={(v) => setValue("city", v)}>
+            <Select value={city} onValueChange={(v) => { setValue("city", v); setValue("society", ""); setSocietyMode("preset"); }}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>{PK_CITIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
             </Select>
           </div>
+          <div className="sm:col-span-2">
+            <Label>Society / Area</Label>
+            {societyMode === "preset" ? (
+              <Select
+                value={society || "__none"}
+                onValueChange={(v) => {
+                  if (v === "Other") { setSocietyMode("other"); setValue("society", ""); }
+                  else if (v === "__none") setValue("society", "");
+                  else setValue("society", v);
+                }}
+              >
+                <SelectTrigger><SelectValue placeholder="Select society" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none">—</SelectItem>
+                  {societyOptions.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            ) : (
+              <div className="flex gap-2">
+                <Input {...register("society")} placeholder="Enter society / area name" />
+                <Button type="button" variant="outline" onClick={() => { setSocietyMode("preset"); setValue("society", ""); }}>
+                  Pick from list
+                </Button>
+              </div>
+            )}
+            {errors.society && <p className="text-xs text-destructive mt-1">{errors.society.message}</p>}
+          </div>
           <div><Label>Bedrooms</Label><Input type="number" {...register("bedrooms")} /></div>
           <div><Label>Bathrooms</Label><Input type="number" {...register("bathrooms")} /></div>
-          <div><Label>Area (sq ft)</Label><Input type="number" {...register("area_sqft")} /></div>
+          <div>
+            <Label>Area (Marlas)</Label>
+            <Input type="number" step="0.5" {...register("area_marlas")} />
+            {errors.area_marlas && <p className="text-xs text-destructive mt-1">{errors.area_marlas.message}</p>}
+          </div>
           <div><Label>Monthly rent (PKR)</Label><Input type="number" {...register("monthly_rent")} /></div>
           <div><Label>Deposit (PKR)</Label><Input type="number" {...register("deposit")} /></div>
         </div>
