@@ -1,19 +1,19 @@
-## Fix: Landlord "Tenants" page shows empty even when an active lease exists
+## Plan: show current tenants correctly in the landlord Tenants tab
 
-### Root cause
-`src/pages/landlord/Tenants.tsx` filters leases with `.eq("status", "active")` only. But on the Leases page, the "Active" tab treats four statuses as active:
+### Goal
+If a lease is shown as **Active / Current** on the lease page, the related tenant must also appear in the landlord’s **Tenants** tab.
 
-```
-ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"]
-```
+### What I’ll change
+- Update `src/pages/landlord/Tenants.tsx` so it uses the same current lease statuses as the landlord Leases page:
+  - `active`
+  - `pending_activation`
+  - `holdover`
+  - `disputed`
+- Keep the Tenants page focused on actual current tenants, not old/rejected/terminated leases.
+- Improve the data fetch so tenant details are loaded reliably, matching the working pattern already used in `src/pages/landlord/Leases.tsx`.
+- Add a loading state so the page does not briefly show “No active tenants” before the data finishes loading.
 
-The lease in the screenshot is in the "Active" tab but its "Activated" field is `—`, so its real DB status is almost certainly `pending_activation` (signed by both parties, not yet auto-activated). The Tenants query filters it out, so the page renders "No active tenants".
-
-### Change
-- `src/pages/landlord/Tenants.tsx`: replace `.eq("status", "active")` with `.in("status", ["active", "pending_activation", "holdover", "disputed"])` so the Tenants list matches the Leases "Active" tab.
-
-No schema, RLS, or backend changes — purely a frontend query fix.
-
-### Acceptance
-- Landlord with the Bahria Town lease sees Hassan Ali listed under Tenants.
-- Tenants list stays in sync with the "Active" tab on the Leases page.
+### Expected result
+- The landlord will see Hassan Ali in the Tenants tab for the Bahria Town lease.
+- The Tenants tab and the Leases “Active” tab will stay consistent.
+- “No active tenants” will only show when there truly are no current/active leases.
