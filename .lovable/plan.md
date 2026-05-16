@@ -1,13 +1,19 @@
-## Remove "Cash" option from Upload payment proof dialog
+## Fix: Landlord "Tenants" page shows empty even when an active lease exists
 
-The "Upload rent payment" dialog (shown in the screenshot) uses the `SubmitPaymentDialog` component. Its Method dropdown is generated from `METHOD_LABEL` in `src/lib/payments.ts`, which includes `cash`.
+### Root cause
+`src/pages/landlord/Tenants.tsx` filters leases with `.eq("status", "active")` only. But on the Leases page, the "Active" tab treats four statuses as active:
 
-Note: the same `METHOD_LABEL` is also used by `PaymentMethodPicker` (landlord payout methods). To avoid affecting that, I'll filter out `cash` locally in `SubmitPaymentDialog` rather than deleting it from the shared map.
+```
+ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"]
+```
+
+The lease in the screenshot is in the "Active" tab but its "Activated" field is `—`, so its real DB status is almost certainly `pending_activation` (signed by both parties, not yet auto-activated). The Tenants query filters it out, so the page renders "No active tenants".
 
 ### Change
-- `src/components/payments/SubmitPaymentDialog.tsx`: when rendering the Method `<Select>` options, filter out `cash` from the `METHOD_LABEL` keys. Default `method` state stays `easypaisa`. The existing `method === "cash"` conditionals can remain as harmless dead code (or be removed — I'll remove them for cleanliness).
+- `src/pages/landlord/Tenants.tsx`: replace `.eq("status", "active")` with `.in("status", ["active", "pending_activation", "holdover", "disputed"])` so the Tenants list matches the Leases "Active" tab.
+
+No schema, RLS, or backend changes — purely a frontend query fix.
 
 ### Acceptance
-- Dropdown shows only: Bank transfer, EasyPaisa, JazzCash.
-- Reference number field is always shown (since cash is no longer selectable).
-- No DB / schema changes.
+- Landlord with the Bahria Town lease sees Hassan Ali listed under Tenants.
+- Tenants list stays in sync with the "Active" tab on the Leases page.
