@@ -136,14 +136,14 @@ export default function PropertyDetail() {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h1 className="font-display text-2xl md:text-3xl font-bold">{p.title}</h1>
-              <p className="text-muted-foreground flex items-center gap-1 mt-1"><MapPin className="h-4 w-4" />{p.address}, {p.city}</p>
+              <p className="text-muted-foreground flex items-center gap-1 mt-1"><MapPin className="h-4 w-4" />{p.address}{p.society ? `, ${p.society}` : ""}, {p.city}</p>
             </div>
             {p.is_verified && <Badge className="gap-1 bg-primary"><ShieldCheck className="h-3 w-3" />Verified</Badge>}
           </div>
           <div className="flex flex-wrap gap-4 mt-4 text-sm">
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted"><BedDouble className="h-4 w-4" />{p.bedrooms} beds</span>
             <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted"><Bath className="h-4 w-4" />{p.bathrooms} baths</span>
-            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted"><Maximize className="h-4 w-4" />{p.area_sqft} ft²</span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-muted"><Maximize className="h-4 w-4" />{p.area_marlas ?? 0} Marla</span>
             <Badge variant="secondary" className="capitalize self-center">{p.type}</Badge>
           </div>
           <div className="prose prose-sm max-w-none mt-6 whitespace-pre-line text-foreground/90">
