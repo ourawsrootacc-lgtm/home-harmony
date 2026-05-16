@@ -7,12 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { relativeTime } from "@/lib/format";
 import { toast } from "sonner";
-import { ChevronDown, ChevronUp, AlertCircle, CheckCircle2 } from "lucide-react";
+import { ChevronDown, ChevronUp, CheckCircle2 } from "lucide-react";
 import { DocumentUploader } from "@/components/documents/DocumentUploader";
 import { DocumentList } from "@/components/documents/DocumentList";
 import {
   uploadAppDoc, listAppDocs, deleteAppDoc,
-  APP_DOC_LABEL, INCOME_PROOF_KINDS,
+  APP_DOC_LABEL,
   type AppDoc, type AppDocKind,
 } from "@/lib/documents";
 
