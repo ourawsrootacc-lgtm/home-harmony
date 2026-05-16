@@ -1,7 +1,7 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
   Home, LayoutDashboard, Building2, Heart, FileText, Wrench, Users,
-  ShieldCheck, MessageSquare, Bell, Settings, LogOut, UserCircle,
+  ShieldCheck, MessageSquare, Bell, Settings, LogOut, UserCircle, CreditCard, UserCog,
 } from "lucide-react";
 import { useAuth } from "@/providers/AuthProvider";
 import { Button } from "@/components/ui/button";
