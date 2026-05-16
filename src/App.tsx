@@ -23,6 +23,7 @@ import LandlordListings from "@/pages/landlord/Listings";
 import LandlordListingForm from "@/pages/landlord/ListingForm";
 import LandlordApplications from "@/pages/landlord/Applications";
 import LandlordTenants from "@/pages/landlord/Tenants";
+import LandlordLeases from "@/pages/landlord/Leases";
 
 import MaintenanceDashboard from "@/pages/maintenance/Dashboard";
 
@@ -78,6 +79,7 @@ export default function App() {
         <Route path="landlord/listings/:id/edit" element={<RoleRoute role="landlord"><LandlordListingForm /></RoleRoute>} />
         <Route path="landlord/applications" element={<RoleRoute role="landlord"><LandlordApplications /></RoleRoute>} />
         <Route path="landlord/tenants" element={<RoleRoute role="landlord"><LandlordTenants /></RoleRoute>} />
+        <Route path="landlord/leases" element={<RoleRoute role="landlord"><LandlordLeases /></RoleRoute>} />
 
         <Route path="maintenance" element={<RoleRoute role="maintenance"><MaintenanceDashboard /></RoleRoute>} />
 

@@ -23,11 +23,12 @@ const OFFER_STATUSES = ["proposed", "countered"];
 const ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"];
 const PAST_STATUSES = ["ended", "terminated", "rejected"];
 
-export default function TenantLease() {
+export default function LandlordLeases() {
   const { user } = useAuth();
   const [leases, setLeases] = useState<any[]>([]);
-  const [versions, setVersions] = useState<Record<string, any>>({}); // by version id
+  const [versions, setVersions] = useState<Record<string, any>>({});
   const [sigsByVersion, setSigsByVersion] = useState<Record<string, any[]>>({});
+  const [tenants, setTenants] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   const load = async () => {
@@ -36,7 +37,7 @@ export default function TenantLease() {
     const { data: rows } = await supabase
       .from("leases")
       .select("*, properties(title,address,city)")
-      .eq("tenant_id", user.id)
+      .eq("landlord_id", user.id)
       .order("created_at", { ascending: false });
     const list = rows ?? [];
     setLeases(list);
@@ -52,6 +53,13 @@ export default function TenantLease() {
       for (const s of ss ?? []) (map[s.lease_version_id] ||= []).push(s);
       setSigsByVersion(map);
     }
+
+    const tenantIds = Array.from(new Set(list.map((l: any) => l.tenant_id)));
+    if (tenantIds.length) {
+      const { data: profs } = await supabase
+        .from("profiles").select("id, full_name, phone").in("id", tenantIds);
+      setTenants(Object.fromEntries((profs ?? []).map((p: any) => [p.id, p])));
+    }
     setLoading(false);
   };
   useEffect(() => { load(); }, [user]);
@@ -63,30 +71,40 @@ export default function TenantLease() {
   return (
     <div>
       <PageHeader
-        title="My lease"
-        description="Already discussed terms with your landlord in Messages? Review the formal offer below and accept to make it binding."
+        title="Leases"
+        description="Track the lease agreements you've sent. Once both parties sign the current version, the lease activates automatically."
       />
       {loading ? <p className="text-muted-foreground">Loading…</p> : (
         <Tabs defaultValue={offers.length ? "offers" : active.length ? "current" : "past"}>
           <TabsList>
-            <TabsTrigger value="offers">Offers ({offers.length})</TabsTrigger>
-            <TabsTrigger value="current">Current ({active.length})</TabsTrigger>
+            <TabsTrigger value="offers">Sent offers ({offers.length})</TabsTrigger>
+            <TabsTrigger value="current">Active ({active.length})</TabsTrigger>
             <TabsTrigger value="past">Past ({past.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="offers" className="space-y-4">
             {offers.length === 0 ? (
-              <EmptyState title="No open offers" description="When a landlord sends you a lease offer, it will appear here." />
+              <EmptyState
+                title="No open offers"
+                description="Send a lease offer from the Applications page after you've agreed terms in chat."
+              />
             ) : offers.map((l) => (
-              <OfferCard key={l.id} lease={l} version={versions[l.current_version_id]} sigs={sigsByVersion[l.current_version_id] ?? []} onChange={load} />
+              <OfferCard
+                key={l.id}
+                lease={l}
+                tenant={tenants[l.tenant_id]}
+                version={versions[l.current_version_id]}
+                sigs={sigsByVersion[l.current_version_id] ?? []}
+                onChange={load}
+              />
             ))}
           </TabsContent>
 
           <TabsContent value="current" className="space-y-4">
             {active.length === 0 ? (
-              <EmptyState title="No active lease" description="Sign a landlord's offer to start a lease." />
+              <EmptyState title="No active leases yet" />
             ) : active.map((l) => (
-              <ActiveCard key={l.id} lease={l} onChange={load} />
+              <ActiveCard key={l.id} lease={l} tenant={tenants[l.tenant_id]} onChange={load} />
             ))}
           </TabsContent>
 
@@ -97,7 +115,7 @@ export default function TenantLease() {
               <div key={l.id} className="rounded-xl border bg-card p-4">
                 <div className="font-semibold">{l.properties?.title}</div>
                 <div className="text-sm text-muted-foreground">
-                  {formatDate(l.start_date)} – {formatDate(l.end_date)} ·
+                  {tenants[l.tenant_id]?.full_name ?? "Tenant"} · {formatDate(l.start_date)} – {formatDate(l.end_date)}
                   <Badge variant="secondary" className="ml-2 capitalize">{l.status.replace("_", " ")}</Badge>
                   {l.end_reason && <span className="ml-2">· {l.end_reason}</span>}
                 </div>
@@ -110,7 +128,9 @@ export default function TenantLease() {
   );
 }
 
-function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: any; sigs: any[]; onChange: () => void }) {
+function OfferCard({
+  lease, tenant, version, sigs, onChange,
+}: { lease: any; tenant: any; version: any; sigs: any[]; onChange: () => void }) {
   const { user } = useAuth();
   const [counterOpen, setCounterOpen] = useState(false);
   const landlordSigned = sigs.some((s) => s.role === "landlord");
@@ -125,17 +145,17 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
         versionId: version.id,
         termsHash: version.terms_hash,
         userId: user.id,
-        role: "tenant",
+        role: "landlord",
       });
-      toast.success("Signed. Lease becomes active once both parties have signed this version.");
+      toast.success("Signed. Lease activates once both parties have signed this version.");
       onChange();
     } catch (e: any) { toast.error(e?.message ?? "Failed to sign"); }
   };
 
-  const decline = async () => {
-    if (!confirm("Decline this offer? The landlord will be notified.")) return;
-    await declineOffer(lease.id, "tenant_declined");
-    toast.success("Offer declined");
+  const withdraw = async () => {
+    if (!confirm("Withdraw this offer? The tenant will be notified.")) return;
+    await declineOffer(lease.id, "landlord_withdrew");
+    toast.success("Offer withdrawn");
     onChange();
   };
 
@@ -144,7 +164,9 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-display text-xl font-semibold">{lease.properties?.title}</div>
-          <div className="text-sm text-muted-foreground">{lease.properties?.address}, {lease.properties?.city}</div>
+          <div className="text-sm text-muted-foreground">
+            {lease.properties?.address}, {lease.properties?.city} · Tenant: {tenant?.full_name ?? "—"}
+          </div>
         </div>
         <Badge className="capitalize bg-indigo-100 text-indigo-800">{lease.status}</Badge>
       </div>
@@ -167,22 +189,20 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
 
       <div className="mt-4 text-xs text-muted-foreground">
         Version hash: <span className="font-mono">{version?.terms_hash?.slice(0, 16)}…</span> ·
-        Landlord signed: {landlordSigned ? "✓" : "—"} · You signed: {tenantSigned ? "✓" : "—"}
+        You signed: {landlordSigned ? "✓" : "—"} · Tenant signed: {tenantSigned ? "✓" : "—"}
       </div>
 
       <div className="flex flex-wrap gap-2 mt-4">
-        {!proposedByMe && !tenantSigned && <Button size="sm" onClick={sign}>Accept &amp; sign</Button>}
         <Button asChild variant="outline" size="sm">
-          <Link to={`/app/messages?to=${lease.landlord_id}`}>
-            <MessageSquare className="h-4 w-4 mr-1" />Message landlord
+          <Link to={`/app/messages?to=${lease.tenant_id}`}>
+            <MessageSquare className="h-4 w-4 mr-1" />Message tenant
           </Link>
         </Button>
-        {!tenantSigned && <Button size="sm" variant="ghost" onClick={decline}>Decline</Button>}
-        {!proposedByMe && (
-          <Button size="sm" variant="ghost" onClick={() => setCounterOpen(true)}>Counter</Button>
-        )}
-        {proposedByMe && !landlordSigned && (
-          <span className="text-xs text-muted-foreground self-center">Waiting for landlord's response.</span>
+        {!proposedByMe && !landlordSigned && <Button size="sm" onClick={sign}>Accept & sign</Button>}
+        <Button size="sm" variant="outline" onClick={() => setCounterOpen(true)}>Edit &amp; resend</Button>
+        {!landlordSigned && <Button size="sm" variant="outline" onClick={withdraw}>Withdraw</Button>}
+        {proposedByMe && !tenantSigned && (
+          <span className="text-xs text-muted-foreground self-center">Waiting for tenant to accept.</span>
         )}
       </div>
 
@@ -198,13 +218,13 @@ function OfferCard({ lease, version, sigs, onChange }: { lease: any; version: an
   );
 }
 
-function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
-  const endEarly = async () => {
-    const days = lease.notice_period_days ?? 30;
-    if (!confirm(`Request to end this lease early? Per your terms, a ${days}-day notice applies. The property will be released for re-listing.`)) return;
+function ActiveCard({ lease, tenant, onChange }: { lease: any; tenant: any; onChange: () => void }) {
+  const endLease = async () => {
+    const reason = prompt("Reason for ending this lease (visible to tenant):", "mutual_agreement");
+    if (!reason) return;
     try {
-      await terminateLease(lease.id, "tenant_left");
-      toast.success("Lease ended. The property is now available again.");
+      await terminateLease(lease.id, reason);
+      toast.success("Lease ended.");
       onChange();
     } catch (e: any) { toast.error(e?.message ?? "Failed to end lease"); }
   };
@@ -214,7 +234,9 @@ function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-display text-xl font-semibold">{lease.properties?.title}</div>
-          <div className="text-sm text-muted-foreground">{lease.properties?.address}, {lease.properties?.city}</div>
+          <div className="text-sm text-muted-foreground">
+            {lease.properties?.address}, {lease.properties?.city} · Tenant: {tenant?.full_name ?? "—"} · {tenant?.phone ?? ""}
+          </div>
         </div>
         <Badge className="capitalize bg-emerald-100 text-emerald-800">{lease.status.replace("_", " ")}</Badge>
       </div>
@@ -230,11 +252,11 @@ function ActiveCard({ lease, onChange }: { lease: any; onChange: () => void }) {
 
       <div className="flex flex-wrap gap-2 mt-4">
         <Button asChild variant="outline" size="sm">
-          <Link to={`/app/messages?to=${lease.landlord_id}`}>
-            <MessageSquare className="h-4 w-4 mr-1" />Message landlord
+          <Link to={`/app/messages?to=${lease.tenant_id}`}>
+            <MessageSquare className="h-4 w-4 mr-1" />Message tenant
           </Link>
         </Button>
-        <Button size="sm" variant="outline" onClick={endEarly}>Request to end lease early</Button>
+        <Button size="sm" variant="outline" onClick={endLease}>Terminate lease</Button>
       </div>
     </div>
   );
@@ -272,7 +294,7 @@ function CounterDialog({ lease, version, onClose, onSent }: { lease: any; versio
         prevVersionId: version.id,
         terms,
       });
-      toast.success("Counter sent");
+      toast.success("Updated offer sent to tenant.");
       onSent();
     } catch (e: any) { toast.error(e?.message ?? "Failed"); }
     finally { setSubmitting(false); }
@@ -281,10 +303,9 @@ function CounterDialog({ lease, version, onClose, onSent }: { lease: any; versio
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Counter the landlord's offer</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>Edit &amp; resend the lease offer</DialogTitle></DialogHeader>
         <p className="text-sm text-muted-foreground">
-          Adjust any field. A new versioned snapshot will be created and the landlord
-          will be asked to accept or counter again.
+          A new versioned snapshot is created; the tenant is asked to accept or decline.
         </p>
         <div className="grid sm:grid-cols-2 gap-3 mt-2">
           <F label="Monthly rent"><Input type="number" value={terms.monthly_rent} onChange={(e) => update("monthly_rent", Number(e.target.value))} /></F>
@@ -297,7 +318,7 @@ function CounterDialog({ lease, version, onClose, onSent }: { lease: any; versio
         <F label="Notes"><Textarea rows={3} value={terms.notes ?? ""} onChange={(e) => update("notes", e.target.value)} /></F>
         <DialogFooter>
           <Button variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
-          <Button onClick={send} disabled={submitting}>{submitting ? "Sending…" : "Send counter"}</Button>
+          <Button onClick={send} disabled={submitting}>{submitting ? "Sending…" : "Send updated offer"}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
