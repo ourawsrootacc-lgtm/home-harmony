@@ -3,7 +3,6 @@ import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/providers/AuthProvider";
 import { PageHeader, EmptyState } from "@/components/feedback/Feedback";
 import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { PaymentCard } from "@/components/payments/PaymentCard";
 import { SubmitPaymentDialog } from "@/components/payments/SubmitPaymentDialog";
 import { listMyPayments, PaymentRow } from "@/lib/payments";
@@ -12,7 +11,6 @@ export default function TenantPayments() {
   const { user } = useAuth();
   const [lease, setLease] = useState<any>(null);
   const [outgoing, setOutgoing] = useState<PaymentRow[]>([]);
-  const [incoming, setIncoming] = useState<PaymentRow[]>([]);
   const [open, setOpen] = useState(false);
 
   const load = () => {
@@ -20,13 +18,12 @@ export default function TenantPayments() {
     supabase.from("leases").select("*").eq("tenant_id", user.id).eq("status", "active").maybeSingle()
       .then(({ data }) => setLease(data));
     listMyPayments("payer").then(({ data }) => setOutgoing(data ?? []));
-    listMyPayments("payee").then(({ data }) => setIncoming(data ?? []));
   };
   useEffect(load, [user]);
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Payments" description="Upload rent and maintenance payment proofs." />
+      <PageHeader title="Payments" description="Upload rent payment proofs." />
       {lease && (
         <div className="rounded-xl border bg-card p-5 flex items-center justify-between">
           <div>
@@ -37,20 +34,10 @@ export default function TenantPayments() {
         </div>
       )}
 
-      <Tabs defaultValue="out">
-        <TabsList>
-          <TabsTrigger value="out">Sent ({outgoing.length})</TabsTrigger>
-          <TabsTrigger value="in">Received ({incoming.length})</TabsTrigger>
-        </TabsList>
-        <TabsContent value="out" className="mt-4 space-y-3">
-          {outgoing.length === 0 ? <EmptyState title="No payments yet" /> :
-            outgoing.map((p) => <PaymentCard key={p.id} payment={p} role="payer" onChanged={load} />)}
-        </TabsContent>
-        <TabsContent value="in" className="mt-4 space-y-3">
-          {incoming.length === 0 ? <EmptyState title="None received" /> :
-            incoming.map((p) => <PaymentCard key={p.id} payment={p} role="payee" onChanged={load} />)}
-        </TabsContent>
-      </Tabs>
+      <div className="space-y-3">
+        {outgoing.length === 0 ? <EmptyState title="No payments yet" /> :
+          outgoing.map((p) => <PaymentCard key={p.id} payment={p} role="payer" onChanged={load} />)}
+      </div>
 
       {lease && (
         <SubmitPaymentDialog open={open} onOpenChange={setOpen}
