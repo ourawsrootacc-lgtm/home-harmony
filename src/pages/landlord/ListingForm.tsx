@@ -159,6 +159,34 @@ export default function LandlordListingForm() {
           </div>
         )}
 
+        {editing && id && (
+          <div>
+            <Label>Property documents</Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Shared with tenants only after you approve their application or activate a lease.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-3">
+              {(Object.keys(PROPERTY_DOC_LABEL) as PropertyDocKind[]).map((k) => (
+                <DocumentUploader
+                  key={k}
+                  label={`Upload ${PROPERTY_DOC_LABEL[k]}`}
+                  onPick={async (f) => {
+                    await uploadPropertyDoc(id, f, k);
+                    refreshDocs();
+                  }}
+                />
+              ))}
+            </div>
+            <DocumentList
+              rows={propDocs}
+              table="property_documents"
+              canDelete
+              onDelete={async (docId) => { await deletePropertyDoc(docId); refreshDocs(); }}
+              showViews
+            />
+          </div>
+        )}
+
         <div className="flex gap-2">
           <Button disabled={isSubmitting}>{editing ? "Save changes" : "Create listing"}</Button>
           <Button type="button" variant="outline" onClick={() => nav("/app/landlord/listings")}>Cancel</Button>
