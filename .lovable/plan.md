@@ -1,18 +1,28 @@
-# Remove "Maintenance staff" from signup role options
+# Landing page: trust-first cleanup
 
-## Changes
+## Remove
+- The 4-tile **stats strip** (Active listings / Cities covered / Verified landlords / Avg. reply time). The "< 2 hr" reply time and "Verified landlords" counts are unverifiable claims — pulled out entirely.
+- Stop fetching `landlords` count in the `useEffect` (no longer used).
 
-**`src/pages/public/Signup.tsx`**
-- Drop the `<SelectItem value="maintenance">Maintenance staff</SelectItem>` option from the role dropdown — only Tenant and Landlord remain.
-- Update the subtitle line: "Join HomeRentals as a tenant or landlord."
+## Replace with a trust band
+A quieter, honest section in the same slot — three points, no numbers:
+1. **Documents, not guesswork** — Tenants share CNIC and income proof in-app. Landlords approve only what they've actually seen.
+2. **Lease & payments in one place** — Sign, track rent, and log maintenance from the same dashboard you applied in.
+3. **Real listings, real people** — Every property is posted by the actual landlord; messaging is direct, no middlemen.
 
-**`src/lib/validators.ts`**
-- Narrow the signup role enum to `z.enum(["tenant", "landlord"])` so backend validation matches the UI.
+Plain card layout, muted background, small lucide icons (`FileCheck`, `Receipt`, `MessageSquare`). No badges, no gradients, no big numbers.
+
+## Tone pass on the rest
+- Hero badge **"Pakistan's modern rental platform"** → **"Built for renters and landlords in Pakistan"** (less marketing-y).
+- CTA card heading stays factual; remove the "Own a property in one of the big five?" phrasing → **"List your property in minutes"** with subtext **"Free to list. You stay in control of every application and lease."**
+- Keep: hero, city chips, Explore by city tiles (real counts), How it works, Just added, CTA. Drop the `Sparkles` badge icon.
 
 ## Out of scope
-- `ROLE_LABELS["maintenance"]` and the `maintenanceSchema` (for repair tickets) stay — those are used by maintenance ticket flows, not signup. Existing maintenance accounts (if any) are not deleted; they just can't be created via public signup anymore.
-- Admin-side creation of maintenance staff is not added here.
+- Testimonials (we have none — adding fake ones would be the exact thing you're avoiding).
+- Press logos / partner badges.
 
 ## Acceptance
-1. The "Create account" form's role dropdown shows only Tenant and Landlord.
-2. Submitting any other role value is rejected by the Zod schema.
+1. Stats strip is gone.
+2. New trust band shows the three honest points instead.
+3. No fabricated numbers, "verified" claims, or response-time promises anywhere on the page.
+4. Visual tone is calmer — fewer gradients/blurs, more whitespace.
