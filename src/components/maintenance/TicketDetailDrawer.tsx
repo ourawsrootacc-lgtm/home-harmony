@@ -2,12 +2,11 @@ import { useEffect, useState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/lib/supabase";
 import {
   allowedActions, checkInTechnician, markWorkDone, verifyWork, closeTicket,
-  openDispute, MaintenanceQuote, TicketStatus, STATUS_LABEL,
+  openDispute, MaintenanceQuote, TicketStatus,
 } from "@/lib/maintenance";
 import { toast } from "sonner";
 import { TicketStatusBadge } from "./TicketStatusBadge";
@@ -16,7 +15,13 @@ import { QuoteCard } from "./QuoteCard";
 import { QuoteFormDialog } from "./QuoteFormDialog";
 import { TechnicianPicker } from "./TechnicianPicker";
 import { CancelDialog } from "./CancelDialog";
+import { TicketChatPanel } from "./TicketChatPanel";
+import { TicketChecklist } from "./TicketChecklist";
+import { AttachmentUploader } from "./AttachmentUploader";
+import { AttachmentGallery } from "./AttachmentGallery";
 import { SubmitPaymentDialog } from "@/components/payments/SubmitPaymentDialog";
+import { Attachment, listAttachments } from "@/lib/maintenanceAttachments";
+import { PaymentRow } from "@/lib/payments";
 
 interface Props {
   ticketId: string | null;
@@ -27,12 +32,14 @@ interface Props {
 export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
   const [ticket, setTicket] = useState<any | null>(null);
   const [quotes, setQuotes] = useState<MaintenanceQuote[]>([]);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [payment, setPayment] = useState<PaymentRow | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [quoteOpen, setQuoteOpen] = useState(false);
   const [counterParent, setCounterParent] = useState<MaintenanceQuote | undefined>();
   const [dispatchOpen, setDispatchOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [payOpen, setPayOpen] = useState(false);
-  const [photoUrls, setPhotoUrls] = useState("");
   const [disputeReason, setDisputeReason] = useState("");
 
   const load = () => {
@@ -44,42 +51,53 @@ export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
     supabase.from("maintenance_quotes").select("*").eq("ticket_id", ticketId)
       .order("created_at", { ascending: false })
       .then(({ data }) => setQuotes((data as any) ?? []));
+    listAttachments(ticketId).then(setAttachments);
+    supabase.from("payments").select("*").eq("ticket_id", ticketId)
+      .eq("context", "maintenance")
+      .order("created_at", { ascending: false }).limit(1).maybeSingle()
+      .then(({ data }) => setPayment((data as any) ?? null));
   };
-  useEffect(load, [ticketId]);
+  useEffect(load, [ticketId, reloadKey]);
 
   if (!ticketId) return null;
 
   const acts = ticket ? allowedActions({ status: ticket.status, funded_by: ticket.funded_by }, role) : {};
   const acceptedQuote = quotes.find((q) => q.status === "accepted");
   const techId = ticket?.assigned_to ?? quotes[0]?.technician_id;
+  const hasAfterPhoto = attachments.some((a) => a.kind === "after");
+  const canClose = acts.close && (
+    role === "admin" || !payment || payment.status === "approved"
+  );
+
+  const refresh = () => setReloadKey((k) => k + 1);
 
   const doVerify = async () => {
     const { error } = await verifyWork(ticketId);
-    if (error) toast.error(error.message); else { toast.success("Verified"); load(); }
+    if (error) toast.error(error.message); else { toast.success("Verified"); refresh(); }
   };
   const doClose = async () => {
     const { error } = await closeTicket(ticketId);
-    if (error) toast.error(error.message); else { toast.success("Closed"); load(); }
+    if (error) toast.error(error.message); else { toast.success("Closed"); refresh(); }
   };
   const doCheckIn = async () => {
     const { error } = await checkInTechnician(ticketId);
-    if (error) toast.error(error.message); else { toast.success("Checked in"); load(); }
+    if (error) toast.error(error.message); else { toast.success("Checked in"); refresh(); }
   };
   const doWorkDone = async () => {
-    const urls = photoUrls.split(/\s+/).filter(Boolean);
-    if (!urls.length) return toast.error("Add at least one after-photo URL");
-    const { error } = await markWorkDone(ticketId, urls);
-    if (error) toast.error(error.message); else { toast.success("Work marked done"); setPhotoUrls(""); load(); }
+    if (!hasAfterPhoto) return toast.error("Upload at least one after-photo first");
+    const paths = attachments.filter((a) => a.kind === "after").map((a) => a.storage_path);
+    const { error } = await markWorkDone(ticketId, paths);
+    if (error) toast.error(error.message); else { toast.success("Work marked done"); refresh(); }
   };
   const doDispute = async () => {
     if (disputeReason.trim().length < 10) return toast.error("Reason ≥10 chars");
     const { error } = await openDispute(ticketId, disputeReason.trim());
-    if (error) toast.error(error.message); else { toast.success("Dispute opened"); setDisputeReason(""); load(); }
+    if (error) toast.error(error.message); else { toast.success("Dispute opened"); setDisputeReason(""); refresh(); }
   };
 
   return (
     <Sheet open={!!ticketId} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full sm:max-w-xl overflow-y-auto">
+      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             <span className="capitalize">{ticket?.category}</span>
@@ -96,6 +114,31 @@ export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
               </div>
             </section>
 
+            {/* Checklist */}
+            <section>
+              <h3 className="font-semibold text-sm mb-2">Progress</h3>
+              <TicketChecklist ticket={ticket} attachments={attachments} quotes={quotes} payment={payment} />
+            </section>
+
+            {/* Photos & files */}
+            <section className="space-y-2">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-sm">Photos & files</h3>
+                <div className="flex gap-2">
+                  {role === "tenant" && (
+                    <AttachmentUploader ticketId={ticketId} kind="issue" label="Add issue photo" onUploaded={refresh} />
+                  )}
+                  {role === "technician" && (
+                    <>
+                      <AttachmentUploader ticketId={ticketId} kind="after" label="Add after photo" onUploaded={refresh} />
+                      <AttachmentUploader ticketId={ticketId} kind="invoice" label="Add invoice" onUploaded={refresh} />
+                    </>
+                  )}
+                </div>
+              </div>
+              <AttachmentGallery ticketId={ticketId} reloadKey={reloadKey} />
+            </section>
+
             {/* Quotes */}
             {quotes.length > 0 && (
               <section className="space-y-2">
@@ -105,10 +148,16 @@ export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
                     canAccept={!!acts.acceptQuote && q.status === "pending"}
                     canCounter={!!acts.counterQuote && q.status === "pending"}
                     onCounter={(qq) => { setCounterParent(qq); setQuoteOpen(true); }}
-                    onDone={load} />
+                    onDone={refresh} />
                 ))}
               </section>
             )}
+
+            {/* Chat */}
+            <section>
+              <h3 className="font-semibold text-sm mb-2">Chat</h3>
+              <TicketChatPanel ticketId={ticketId} />
+            </section>
 
             {/* Action buttons */}
             <section className="flex flex-wrap gap-2">
@@ -121,11 +170,16 @@ export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
                 </Button>
               )}
               {acts.checkIn && <Button size="sm" onClick={doCheckIn}>Check in & start work</Button>}
+              {acts.markWorkDone && (
+                <Button size="sm" onClick={doWorkDone} disabled={!hasAfterPhoto}>
+                  Mark work done {!hasAfterPhoto && "(upload after-photo first)"}
+                </Button>
+              )}
               {acts.verify && <Button size="sm" onClick={doVerify}>Verify work done</Button>}
-              {acts.close && <Button size="sm" onClick={doClose}>Close ticket</Button>}
+              {canClose && <Button size="sm" onClick={doClose}>Close ticket</Button>}
               {acts.pay && acceptedQuote && (
                 <Button size="sm" variant="default" onClick={() => setPayOpen(true)}>
-                  Pay technician
+                  {payment ? "Update payment proof" : "Pay technician"}
                 </Button>
               )}
               {acts.cancel && (
@@ -133,14 +187,10 @@ export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
               )}
             </section>
 
-            {/* Mark work done */}
-            {acts.markWorkDone && (
-              <section className="rounded border p-3 space-y-2">
-                <Label className="text-sm">After-photo URLs (space-separated)</Label>
-                <Textarea rows={2} value={photoUrls} onChange={(e) => setPhotoUrls(e.target.value)}
-                  placeholder="https://…/photo1.jpg https://…/photo2.jpg" />
-                <Button size="sm" onClick={doWorkDone}>Mark work done</Button>
-              </section>
+            {acts.close && payment && payment.status !== "approved" && role !== "admin" && (
+              <p className="text-xs text-amber-700">
+                Close is blocked until the payment is approved.
+              </p>
             )}
 
             {/* Dispute */}
@@ -165,16 +215,16 @@ export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
         {techId && (
           <QuoteFormDialog open={quoteOpen} onOpenChange={setQuoteOpen}
             ticketId={ticketId} technicianId={techId} role={role === "technician" ? "technician" : role as any}
-            parent={counterParent} onDone={load} />
+            parent={counterParent} onDone={refresh} />
         )}
         <TechnicianPicker open={dispatchOpen} onOpenChange={setDispatchOpen}
           ticketId={ticketId} city={ticket?.properties?.city} skill={ticket?.category}
-          onDone={load} />
+          onDone={refresh} />
         <CancelDialog open={cancelOpen} onOpenChange={setCancelOpen}
           ticketId={ticketId} cancelledByRole={role === "admin" ? "admin" : role as any}
           scheduledStartAt={ticket?.scheduled_start_at}
           acceptedQuotePrice={acceptedQuote?.price}
-          onDone={load} />
+          onDone={refresh} />
         {acceptedQuote && techId && (
           <SubmitPaymentDialog open={payOpen} onOpenChange={setPayOpen}
             context="maintenance"
@@ -182,7 +232,7 @@ export function TicketDetailDrawer({ ticketId, role, onOpenChange }: Props) {
             quoteId={acceptedQuote.id}
             payeeId={techId}
             defaultAmount={acceptedQuote.price}
-            onDone={load} />
+            onDone={refresh} />
         )}
       </SheetContent>
     </Sheet>
