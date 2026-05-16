@@ -16,8 +16,9 @@ import { formatPKR, formatDate, relativeTime } from "@/lib/format";
 import { MessageSquare } from "lucide-react";
 import { toast } from "sonner";
 import {
-  signCurrentVersion, counterOffer, declineOffer, terminateLease, LeaseTerms,
+  signCurrentVersion, counterOffer, declineOffer, LeaseTerms,
 } from "@/lib/lease";
+import LeaseLifecyclePanel from "@/components/lease/LeaseLifecyclePanel";
 
 const OFFER_STATUSES = ["proposed", "countered"];
 const ACTIVE_STATUSES = ["active", "pending_activation", "holdover", "disputed"];
