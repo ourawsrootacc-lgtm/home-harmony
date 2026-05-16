@@ -16,7 +16,7 @@ export default function TenantFavorites() {
     setLoading(true);
     supabase
       .from("favorites")
-      .select("property_id, properties(id,title,city,address,monthly_rent,bedrooms,bathrooms,area_sqft,type,is_verified,property_images(url))")
+      .select("property_id, properties(id,title,city,society,address,monthly_rent,bedrooms,bathrooms,area_marlas,type,is_verified,property_images(url))")
       .eq("user_id", user.id)
       .then(({ data }) => {
         setRows((data ?? []).map((r: any) => ({ ...r.properties, cover_url: r.properties?.property_images?.[0]?.url })).filter((p: any) => p?.id));

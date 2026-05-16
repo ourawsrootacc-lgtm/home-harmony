@@ -11,7 +11,9 @@ export type PropertyCardData = {
   monthly_rent: number;
   bedrooms: number;
   bathrooms: number;
-  area_sqft: number;
+  area_marlas?: number | null;
+  area_sqft?: number | null;
+  society?: string | null;
   type: string;
   is_verified?: boolean | null;
   cover_url?: string | null;
@@ -65,12 +67,15 @@ export function PropertyCard({
           <span className="text-primary font-bold whitespace-nowrap">{formatPKR(p.monthly_rent)}<span className="text-xs font-normal text-muted-foreground">/mo</span></span>
         </div>
         <div className="text-sm text-muted-foreground flex items-center gap-1">
-          <MapPin className="h-3.5 w-3.5" /><span className="line-clamp-1">{p.address}, {p.city}</span>
+          <MapPin className="h-3.5 w-3.5" />
+          <span className="line-clamp-1">
+            {p.society ? `${p.society}, ` : ""}{p.city}
+          </span>
         </div>
         <div className="flex items-center gap-3 text-sm text-muted-foreground pt-1 border-t">
           <span className="inline-flex items-center gap-1"><BedDouble className="h-4 w-4" />{p.bedrooms}</span>
           <span className="inline-flex items-center gap-1"><Bath className="h-4 w-4" />{p.bathrooms}</span>
-          <span className="inline-flex items-center gap-1"><Maximize className="h-4 w-4" />{p.area_sqft} ft²</span>
+          <span className="inline-flex items-center gap-1"><Maximize className="h-4 w-4" />{p.area_marlas ?? 0} Marla</span>
           <Badge variant="secondary" className="ml-auto capitalize">{p.type}</Badge>
         </div>
       </div>
