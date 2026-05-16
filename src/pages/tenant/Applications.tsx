@@ -93,8 +93,6 @@ function ApplicationRow({ row, onCancel }: { row: any; onCancel: () => void }) {
   useEffect(() => { if (open) refresh(); }, [open, row.id]);
 
   const has = (k: AppDocKind) => docs.some((d) => d.kind === k);
-  const hasIncome = INCOME_PROOF_KINDS.some(has);
-  const complete = has("cnic") && hasIncome;
   const canUpload = UPLOADABLE_STATUSES.includes(row.status);
 
   return (
