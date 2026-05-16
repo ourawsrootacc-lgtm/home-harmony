@@ -17,6 +17,7 @@ import TenantFavorites from "@/pages/tenant/Favorites";
 import TenantApplications from "@/pages/tenant/Applications";
 import TenantLease from "@/pages/tenant/Lease";
 import TenantMaintenance from "@/pages/tenant/Maintenance";
+import TenantPayments from "@/pages/tenant/Payments";
 
 import LandlordDashboard from "@/pages/landlord/Dashboard";
 import LandlordListings from "@/pages/landlord/Listings";
@@ -24,8 +25,11 @@ import LandlordListingForm from "@/pages/landlord/ListingForm";
 import LandlordApplications from "@/pages/landlord/Applications";
 import LandlordTenants from "@/pages/landlord/Tenants";
 import LandlordLeases from "@/pages/landlord/Leases";
+import LandlordMaintenance from "@/pages/landlord/Maintenance";
+import LandlordPayments from "@/pages/landlord/Payments";
 
 import MaintenanceDashboard from "@/pages/maintenance/Dashboard";
+import MaintenanceProfile from "@/pages/maintenance/Profile";
 
 import AdminDashboard from "@/pages/admin/Dashboard";
 import AdminUsers from "@/pages/admin/Users";
