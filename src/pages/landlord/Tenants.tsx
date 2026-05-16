@@ -12,7 +12,8 @@ export default function LandlordTenants() {
     if (!user) return;
     supabase.from("leases")
       .select("*, properties(title), profiles:tenant_id(full_name,phone)")
-      .eq("landlord_id", user.id).eq("status", "active")
+      .eq("landlord_id", user.id)
+      .in("status", ["active", "pending_activation", "holdover", "disputed"])
       .then(({ data }) => setRows(data ?? []));
   }, [user]);
 
