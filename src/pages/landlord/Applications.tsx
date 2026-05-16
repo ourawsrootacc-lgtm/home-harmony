@@ -14,10 +14,12 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { MessageSquare, FileText } from "lucide-react";
+import { MessageSquare, FileText, ChevronDown, ChevronUp, Eye } from "lucide-react";
 import { relativeTime, formatPKR } from "@/lib/format";
 import { toast } from "sonner";
 import { sendInitialOffer, LeaseTerms } from "@/lib/lease";
+import { DocumentList } from "@/components/documents/DocumentList";
+import { listAppDocs, type AppDoc } from "@/lib/documents";
 
 const STATUS_VARIANT: Record<string, string> = {
   pending: "bg-amber-100 text-amber-800",
@@ -78,11 +80,19 @@ export default function LandlordApplications() {
   }, [rows]);
 
   const reject = async (a: any) => {
+    if (!confirm("Reject this application? The tenant's uploaded documents will be deleted.")) return;
     const { error } = await supabase.from("applications")
       .update({ status: "rejected", decided_at: new Date().toISOString() })
       .eq("id", a.id);
     if (error) toast.error(error.message);
     else { toast.success("Application rejected"); load(); }
+  };
+
+  const markUnderReview = async (a: any) => {
+    const { error } = await supabase.from("applications")
+      .update({ status: "under_review" }).eq("id", a.id);
+    if (error) toast.error(error.message);
+    else { toast.success("Marked as under review — tenant's documents are now visible."); load(); }
   };
 
   return (
@@ -118,6 +128,7 @@ export default function LandlordApplications() {
                     row={r}
                     onReject={() => reject(r)}
                     onOpenOffer={() => setOfferFor(r)}
+                    onMarkUnderReview={() => markUnderReview(r)}
                   />
                 ))}
               </div>
@@ -137,8 +148,21 @@ export default function LandlordApplications() {
   );
 }
 
-function ApplicationRow({ row, onReject, onOpenOffer }: { row: any; onReject: () => void; onOpenOffer: () => void }) {
+function ApplicationRow({
+  row, onReject, onOpenOffer, onMarkUnderReview,
+}: {
+  row: any; onReject: () => void; onOpenOffer: () => void; onMarkUnderReview: () => void;
+}) {
   const canOffer = ["pending", "under_review"].includes(row.status);
+  const docsUnlocked = ["under_review", "offer_sent", "approved", "fulfilled"].includes(row.status);
+  const [docsOpen, setDocsOpen] = useState(false);
+  const [docs, setDocs] = useState<AppDoc[]>([]);
+
+  useEffect(() => {
+    if (!docsOpen || !docsUnlocked) return;
+    listAppDocs(row.id).then(setDocs);
+  }, [docsOpen, docsUnlocked, row.id, row.status]);
+
   return (
     <div className="p-4">
       <div className="flex items-start justify-between gap-4">
@@ -159,6 +183,11 @@ function ApplicationRow({ row, onReject, onOpenOffer }: { row: any; onReject: ()
             <MessageSquare className="h-4 w-4 mr-1" />Discuss terms
           </Link>
         </Button>
+        {row.status === "pending" && (
+          <Button size="sm" variant="outline" onClick={onMarkUnderReview}>
+            <Eye className="h-4 w-4 mr-1" />Mark under review
+          </Button>
+        )}
         {canOffer && (
           <>
             <Button size="sm" onClick={onOpenOffer}>
@@ -174,7 +203,22 @@ function ApplicationRow({ row, onReject, onOpenOffer }: { row: any; onReject: ()
             </Link>
           </Button>
         )}
+        <Button size="sm" variant="ghost" onClick={() => setDocsOpen((v) => !v)}>
+          <FileText className="h-4 w-4 mr-1" />Documents
+          {docsOpen ? <ChevronUp className="h-3 w-3 ml-1" /> : <ChevronDown className="h-3 w-3 ml-1" />}
+        </Button>
       </div>
+
+      {docsOpen && (
+        <div className="mt-3 border-t pt-3">
+          <DocumentList
+            rows={docs}
+            table="application_documents"
+            locked={!docsUnlocked}
+            lockedHint="Tenant shared documents with their application. Click 'Mark under review' to view them — the tenant will see that you opened each file."
+          />
+        </div>
+      )}
     </div>
   );
 }
