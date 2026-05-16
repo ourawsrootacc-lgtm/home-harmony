@@ -109,15 +109,9 @@ function ApplicationRow({ row, onCancel }: { row: any; onCancel: () => void }) {
           </div>
         </div>
         {canUpload && docsLoaded && (
-          complete ? (
-            <Badge className="bg-emerald-100 text-emerald-800 gap-1">
-              <CheckCircle2 className="h-3 w-3" />Docs complete
-            </Badge>
-          ) : (
-            <Badge className="bg-amber-100 text-amber-800 gap-1">
-              <AlertCircle className="h-3 w-3" />Docs incomplete
-            </Badge>
-          )
+          <Badge variant="secondary" className="gap-1">
+            <CheckCircle2 className="h-3 w-3" />{docs.length} doc{docs.length === 1 ? "" : "s"} shared
+          </Badge>
         )}
         <Badge className={`${STATUS_VARIANT[row.status] ?? "bg-muted"} capitalize`}>
           {row.status.replace("_", " ")}
