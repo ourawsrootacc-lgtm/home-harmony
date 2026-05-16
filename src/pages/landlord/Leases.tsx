@@ -199,11 +199,14 @@ function OfferCard({
             <MessageSquare className="h-4 w-4 mr-1" />Message tenant
           </Link>
         </Button>
-        {!proposedByMe && !landlordSigned && <Button size="sm" onClick={sign}>Accept & sign</Button>}
+        {!landlordSigned && <Button size="sm" onClick={sign}>Accept &amp; sign</Button>}
         <Button size="sm" variant="outline" onClick={() => setCounterOpen(true)}>Edit &amp; resend</Button>
         {!landlordSigned && <Button size="sm" variant="outline" onClick={withdraw}>Withdraw</Button>}
-        {proposedByMe && !tenantSigned && (
+        {landlordSigned && !tenantSigned && (
           <span className="text-xs text-muted-foreground self-center">Waiting for tenant to accept.</span>
+        )}
+        {!landlordSigned && tenantSigned && (
+          <span className="text-xs text-muted-foreground self-center">Tenant signed — sign to activate.</span>
         )}
       </div>
 

@@ -110,10 +110,25 @@ export async function sendInitialOffer(args: {
     .single();
   if (vErr || !version) throw vErr ?? new Error("Version insert failed");
 
-  await supabase.from("leases").update({ current_version_id: version.id }).eq("id", lease.id);
+  await supabase.from("leases").update({
+    current_version_id: version.id,
+    landlord_signed_at: new Date().toISOString(),
+  }).eq("id", lease.id);
+
+  // Sending the offer counts as the landlord's signature on this version.
+  await supabase.from("lease_signatures").insert({
+    lease_version_id: version.id,
+    user_id: args.landlordId,
+    role: "landlord",
+    terms_hash: hash,
+    user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    otp_verified_at: new Date().toISOString(),
+  });
+
   await supabase.from("applications")
     .update({ status: "offer_sent" }).eq("id", args.applicationId);
   await logEvent(lease.id, "offer_sent", { version_id: version.id, hash });
+  await logEvent(lease.id, "signed", { version_id: version.id, role: "landlord", auto: true });
 
   return { lease, version };
 }
@@ -139,10 +154,30 @@ export async function counterOffer(args: {
     .single();
   if (error || !version) throw error ?? new Error("Counter insert failed");
 
+  // Determine the proposer's role to auto-sign the new version.
+  const { data: leaseRow } = await supabase
+    .from("leases").select("landlord_id, tenant_id").eq("id", args.leaseId).single();
+  const proposerRole: "landlord" | "tenant" =
+    leaseRow?.landlord_id === args.proposedBy ? "landlord" : "tenant";
+
+  await supabase.from("lease_signatures").insert({
+    lease_version_id: version.id,
+    user_id: args.proposedBy,
+    role: proposerRole,
+    terms_hash: hash,
+    user_agent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+    otp_verified_at: new Date().toISOString(),
+  });
+
+  const sigStamp = proposerRole === "landlord"
+    ? { landlord_signed_at: new Date().toISOString(), tenant_signed_at: null }
+    : { tenant_signed_at: new Date().toISOString(), landlord_signed_at: null };
+
   await supabase.from("leases")
     .update({
       current_version_id: version.id,
       status: "countered",
+      ...sigStamp,
       monthly_rent: args.terms.monthly_rent,
       deposit: args.terms.deposit,
       start_date: args.terms.start_date,
@@ -160,6 +195,7 @@ export async function counterOffer(args: {
     .eq("id", args.leaseId);
 
   await logEvent(args.leaseId, "countered", { version_id: version.id, hash });
+  await logEvent(args.leaseId, "signed", { version_id: version.id, role: proposerRole, auto: true });
   return version;
 }
 
