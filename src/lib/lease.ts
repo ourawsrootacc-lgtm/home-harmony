@@ -16,6 +16,27 @@ export type LeaseTerms = {
   notes?: string;
 };
 
+export type TerminationGround =
+  | "mutual_agreement"
+  | "tenant_notice"
+  | "landlord_notice"
+  | "non_payment"
+  | "material_breach"
+  | "personal_bona_fide_need"
+  | "end_of_term"
+  | "property_unfit";
+
+export const TERMINATION_GROUND_LABELS: Record<TerminationGround, string> = {
+  mutual_agreement: "Mutual agreement",
+  tenant_notice: "Tenant's notice to vacate",
+  landlord_notice: "Landlord's notice",
+  non_payment: "Non-payment of rent (≥2 months)",
+  material_breach: "Material breach of terms",
+  personal_bona_fide_need: "Landlord's bona-fide personal need",
+  end_of_term: "End of term, not renewed",
+  property_unfit: "Property became unfit for use",
+};
+
 /** Canonical JSON: deterministic key order so hashes are reproducible. */
 export function canonicalTerms(t: LeaseTerms): string {
   const keys = Object.keys(t).sort() as (keyof LeaseTerms)[];
@@ -36,6 +57,10 @@ export async function hashTerms(t: LeaseTerms): Promise<string> {
 async function logEvent(leaseId: string, kind: string, payload: Record<string, unknown> = {}) {
   await supabase.from("lease_events").insert({ lease_id: leaseId, kind, payload });
 }
+
+/* ------------------------------------------------------------------ */
+/* Initial lifecycle (creation / counter / sign)                       */
+/* ------------------------------------------------------------------ */
 
 /** Landlord sends the first formal offer for an application. */
 export async function sendInitialOffer(args: {
@@ -93,10 +118,10 @@ export async function sendInitialOffer(args: {
   return { lease, version };
 }
 
-/** Either party counters with a new set of terms. */
+/** Either party counters with a new set of terms (pre-activation only). */
 export async function counterOffer(args: {
   leaseId: string;
-  proposedBy: string;     // user id of whoever is countering
+  proposedBy: string;
   prevVersionId: string;
   terms: LeaseTerms;
 }) {
@@ -158,14 +183,12 @@ export async function signCurrentVersion(args: {
 
   await logEvent(args.leaseId, "signed", { version_id: args.versionId, role: args.role });
 
-  // Stamp lease-level timestamps + try activation.
   const stamp =
     args.role === "landlord"
       ? { landlord_signed_at: new Date().toISOString() }
       : { tenant_signed_at: new Date().toISOString() };
   await supabase.from("leases").update(stamp).eq("id", args.leaseId);
 
-  // Count sigs on this version; if both present, flip to active.
   const { data: sigs } = await supabase
     .from("lease_signatures")
     .select("role")
@@ -180,18 +203,155 @@ export async function signCurrentVersion(args: {
   }
 }
 
-/** Decline / withdraw an open offer. */
+/** Decline / withdraw a pre-activation offer. */
 export async function declineOffer(leaseId: string, reason?: string) {
   await supabase.from("leases").update({ status: "rejected", end_reason: reason ?? null }).eq("id", leaseId);
   await logEvent(leaseId, "declined", { reason });
 }
 
-/** End an active lease (mutual, tenant notice, landlord ground, etc.). */
+/* ------------------------------------------------------------------ */
+/* Mutual change requests (active-lease lifecycle)                     */
+/* ------------------------------------------------------------------ */
+
+export type LeaseRequest = {
+  id: string;
+  lease_id: string;
+  kind: "amendment" | "extension" | "renewal" | "termination";
+  status: "pending" | "accepted" | "declined" | "countered" | "withdrawn" | "superseded";
+  requested_by: string;
+  proposed_terms: LeaseTerms | null;
+  new_end_date: string | null;
+  effective_date: string | null;
+  ground: TerminationGround | null;
+  ground_details: string | null;
+  notice_served_at: string;
+  responded_by: string | null;
+  responded_at: string | null;
+  created_at: string;
+};
+
+export async function requestAmendment(args: {
+  leaseId: string;
+  by: string;
+  proposedTerms: LeaseTerms;
+  notes?: string;
+}) {
+  const { error } = await supabase.from("lease_requests").insert({
+    lease_id: args.leaseId,
+    kind: "amendment",
+    requested_by: args.by,
+    proposed_terms: args.proposedTerms as any,
+    ground_details: args.notes ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function requestExtension(args: {
+  leaseId: string;
+  by: string;
+  newEndDate: string;
+  notes?: string;
+}) {
+  const { error } = await supabase.from("lease_requests").insert({
+    lease_id: args.leaseId,
+    kind: "extension",
+    requested_by: args.by,
+    new_end_date: args.newEndDate,
+    ground_details: args.notes ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function requestRenewal(args: {
+  leaseId: string;
+  by: string;
+  proposedTerms: LeaseTerms;
+  notes?: string;
+}) {
+  const { error } = await supabase.from("lease_requests").insert({
+    lease_id: args.leaseId,
+    kind: "renewal",
+    requested_by: args.by,
+    proposed_terms: args.proposedTerms as any,
+    new_end_date: args.proposedTerms.end_date,
+    ground_details: args.notes ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function serveTerminationNotice(args: {
+  leaseId: string;
+  by: string;
+  ground: TerminationGround;
+  effectiveDate: string;     // YYYY-MM-DD
+  groundDetails?: string;
+}) {
+  const { error } = await supabase.from("lease_requests").insert({
+    lease_id: args.leaseId,
+    kind: "termination",
+    requested_by: args.by,
+    ground: args.ground,
+    effective_date: args.effectiveDate,
+    ground_details: args.groundDetails ?? null,
+  });
+  if (error) throw error;
+}
+
+export async function respondToRequest(args: {
+  requestId: string;
+  decision: "accepted" | "declined";
+}) {
+  const { error } = await supabase
+    .from("lease_requests")
+    .update({ status: args.decision })
+    .eq("id", args.requestId);
+  if (error) throw error;
+}
+
+export async function withdrawRequest(requestId: string) {
+  const { error } = await supabase
+    .from("lease_requests")
+    .update({ status: "withdrawn" })
+    .eq("id", requestId);
+  if (error) throw error;
+}
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
+
+/** Statutory minimum effective date (today + notice_period_days). */
+export function minEffectiveDate(noticePeriodDays: number, from: Date = new Date()): string {
+  const d = new Date(from);
+  d.setDate(d.getDate() + (noticePeriodDays || 30));
+  return d.toISOString().slice(0, 10);
+}
+
+/** Lock-in penalty per common Pakistani residential practice. */
+export function computeLockInPenalty(args: {
+  monthlyRent: number;
+  lockInMonths: number;
+  activatedAt: string | null;
+  effectiveDate: string;
+}): number {
+  if (!args.lockInMonths || !args.activatedAt) return 0;
+  const start = new Date(args.activatedAt);
+  const end = new Date(args.effectiveDate);
+  const monthsServed =
+    (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+  const remaining = Math.max(0, args.lockInMonths - monthsServed);
+  return remaining * args.monthlyRent;
+}
+
+/**
+ * Deprecated: do not call directly. Kept only for admin / migration use.
+ * The UI MUST go through `serveTerminationNotice` + counter-party accept.
+ */
 export async function terminateLease(leaseId: string, reason: string) {
   const { error } = await supabase
     .from("leases")
     .update({ status: "terminated", end_reason: reason })
     .eq("id", leaseId);
   if (error) throw error;
-  await logEvent(leaseId, "terminated", { reason });
+  await logEvent(leaseId, "terminated_unilateral_legacy", { reason });
 }
