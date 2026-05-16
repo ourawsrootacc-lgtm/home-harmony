@@ -249,6 +249,4 @@ function DocSlot({ kind, required, optional, file, onPick }: {
     </div>
   );
 }
-    </div>
-  );
-}
+
