@@ -221,6 +221,7 @@ function OfferCard({
 
 function ActiveCard({ lease, tenant, onChange }: { lease: any; tenant: any; onChange: () => void }) {
   const { user } = useAuth();
+  const isPending = lease.status === "pending_activation";
   return (
     <div className="rounded-xl border bg-card p-6">
       <div className="flex items-start justify-between gap-3">
@@ -230,8 +231,17 @@ function ActiveCard({ lease, tenant, onChange }: { lease: any; tenant: any; onCh
             {lease.properties?.address}, {lease.properties?.city} · Tenant: {tenant?.full_name ?? "—"} · {tenant?.phone ?? ""}
           </div>
         </div>
-        <Badge className="capitalize bg-emerald-100 text-emerald-800">{lease.status.replace("_", " ")}</Badge>
+        <Badge className={`capitalize ${isPending ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800"}`}>
+          {lease.status.replace("_", " ")}
+        </Badge>
       </div>
+
+      {isPending && (
+        <div className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
+          Waiting on the tenant to submit the security deposit ({formatPKR(lease.deposit)}).
+          When they upload proof, approve it in <Link to="/app/landlord/payments" className="underline font-medium">Payments</Link> to activate the lease.
+        </div>
+      )}
 
       <div className="grid sm:grid-cols-2 gap-4 mt-4 text-sm">
         <Info label="Rent">{formatPKR(lease.monthly_rent)}/mo</Info>
@@ -250,7 +260,9 @@ function ActiveCard({ lease, tenant, onChange }: { lease: any; tenant: any; onCh
         </Button>
       </div>
 
-      {user && <LeaseLifecyclePanel lease={lease} role="landlord" userId={user.id} onChange={onChange} />}
+      {user && lease.status === "active" && (
+        <LeaseLifecyclePanel lease={lease} role="landlord" userId={user.id} onChange={onChange} />
+      )}
     </div>
   );
 }
