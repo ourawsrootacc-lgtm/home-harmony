@@ -220,16 +220,7 @@ function OfferCard({
 }
 
 function ActiveCard({ lease, tenant, onChange }: { lease: any; tenant: any; onChange: () => void }) {
-  const endLease = async () => {
-    const reason = prompt("Reason for ending this lease (visible to tenant):", "mutual_agreement");
-    if (!reason) return;
-    try {
-      await terminateLease(lease.id, reason);
-      toast.success("Lease ended.");
-      onChange();
-    } catch (e: any) { toast.error(e?.message ?? "Failed to end lease"); }
-  };
-
+  const { user } = useAuth();
   return (
     <div className="rounded-xl border bg-card p-6">
       <div className="flex items-start justify-between gap-3">
@@ -247,7 +238,7 @@ function ActiveCard({ lease, tenant, onChange }: { lease: any; tenant: any; onCh
         <Info label="Deposit">{formatPKR(lease.deposit)}</Info>
         <Info label="Start">{formatDate(lease.start_date)}</Info>
         <Info label="End">{formatDate(lease.end_date)}</Info>
-        <Info label="Notice period">{lease.notice_period_days} days</Info>
+        <Info label="Notice period">{lease.notice_period_days ?? 30} days</Info>
         <Info label="Activated">{lease.activated_at ? relativeTime(lease.activated_at) : "—"}</Info>
       </div>
 
@@ -257,8 +248,9 @@ function ActiveCard({ lease, tenant, onChange }: { lease: any; tenant: any; onCh
             <MessageSquare className="h-4 w-4 mr-1" />Message tenant
           </Link>
         </Button>
-        <Button size="sm" variant="outline" onClick={endLease}>Terminate lease</Button>
       </div>
+
+      {user && <LeaseLifecyclePanel lease={lease} role="landlord" userId={user.id} onChange={onChange} />}
     </div>
   );
 }
