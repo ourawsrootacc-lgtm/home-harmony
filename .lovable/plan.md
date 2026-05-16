@@ -1,28 +1,48 @@
-# Landing page: trust-first cleanup
+## Problem
 
-## Remove
-- The 4-tile **stats strip** (Active listings / Cities covered / Verified landlords / Avg. reply time). The "< 2 hr" reply time and "Verified landlords" counts are unverifiable claims — pulled out entirely.
-- Stop fetching `landlords` count in the `useEffect` (no longer used).
+Your local `supabase db push` fails on `20260523100000_property_society_and_marlas.sql` at step 3:
 
-## Replace with a trust band
-A quieter, honest section in the same slot — three points, no numbers:
-1. **Documents, not guesswork** — Tenants share CNIC and income proof in-app. Landlords approve only what they've actually seen.
-2. **Lease & payments in one place** — Sign, track rent, and log maintenance from the same dashboard you applied in.
-3. **Real listings, real people** — Every property is posted by the actual landlord; messaging is direct, no middlemen.
+```
+ERROR: check constraint "properties_city_check" of relation "properties" is violated by some row
+```
 
-Plain card layout, muted background, small lucide icons (`FileCheck`, `Receipt`, `MessageSquare`). No badges, no gradients, no big numbers.
+Your local DB has seeded properties in cities outside the supported five (Rawalpindi, Faisalabad, plus any others from `scripts/seed.mjs`). The constraint refuses to apply while those rows exist.
 
-## Tone pass on the rest
-- Hero badge **"Pakistan's modern rental platform"** → **"Built for renters and landlords in Pakistan"** (less marketing-y).
-- CTA card heading stays factual; remove the "Own a property in one of the big five?" phrasing → **"List your property in minutes"** with subtext **"Free to list. You stay in control of every application and lease."**
-- Keep: hero, city chips, Explore by city tiles (real counts), How it works, Just added, CTA. Drop the `Sparkles` badge icon.
+## Fix
 
-## Out of scope
-- Testimonials (we have none — adding fake ones would be the exact thing you're avoiding).
-- Press logos / partner badges.
+Update the migration to **normalize/remove unsupported-city rows before adding the constraint**, so it's idempotent and safe on any database (local seeded, fresh, or production).
 
-## Acceptance
-1. Stats strip is gone.
-2. New trust band shows the three honest points instead.
-3. No fabricated numbers, "verified" claims, or response-time promises anywhere on the page.
-4. Visual tone is calmer — fewer gradients/blurs, more whitespace.
+Edit `supabase/pending_migrations/20260523100000_property_society_and_marlas.sql` — in step 3, before the `ADD CONSTRAINT`, delete properties whose city isn't in the allowed five. Cascading FKs (applications, leases, favorites, maintenance_tickets, property_images) will clean up dependents.
+
+```sql
+-- 3. Restrict city to the 5 supported cities.
+alter table public.properties
+  drop constraint if exists properties_city_check;
+
+-- Remove legacy rows for unsupported cities so the new check can apply.
+delete from public.properties
+ where city not in ('Karachi','Lahore','Islamabad','Peshawar','Quetta');
+
+alter table public.properties
+  add constraint properties_city_check
+  check (city in ('Karachi','Lahore','Islamabad','Peshawar','Quetta'));
+```
+
+## Re-run locally
+
+```bash
+supabase db push
+```
+
+The earlier partial run already added `society`, `area_marlas`, the trigger, and dropped the NOT NULL on `area_sqft`, so the migration's `if not exists` / `drop ... if exists` guards make a re-run safe.
+
+If `db push` still says "already applied" but the constraint isn't there, mark the migration as reverted and retry:
+
+```bash
+supabase migration repair --status reverted 20260523100000
+supabase db push
+```
+
+## Note on seed data
+
+`scripts/seed.mjs` still inserts Rawalpindi and Faisalabad properties — those inserts will now fail after the constraint is in place. I'll also trim that seed list to the five supported cities so `node scripts/seed.mjs` keeps working.
