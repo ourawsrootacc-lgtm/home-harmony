@@ -1,20 +1,13 @@
-## Scope
-Simplify the Payments page on both tenant and landlord dashboards by removing tabs that don't apply to our system.
+## Remove "Cash" option from Upload payment proof dialog
 
-## Changes
+The "Upload rent payment" dialog (shown in the screenshot) uses the `SubmitPaymentDialog` component. Its Method dropdown is generated from `METHOD_LABEL` in `src/lib/payments.ts`, which includes `cash`.
 
-### 1. `src/pages/tenant/Payments.tsx`
-- Remove the "Received" tab and the `incoming` state + its fetch.
-- Drop the `Tabs` wrapper entirely — render the "Sent" list directly under the rent card.
+Note: the same `METHOD_LABEL` is also used by `PaymentMethodPicker` (landlord payout methods). To avoid affecting that, I'll filter out `cash` locally in `SubmitPaymentDialog` rather than deleting it from the shared map.
 
-### 2. `src/pages/landlord/Payments.tsx`
-- Remove the "To technicians" tab and the `outgoing` state + its fetch.
-- Drop the `Tabs` wrapper entirely — render the "From tenants" list directly.
+### Change
+- `src/components/payments/SubmitPaymentDialog.tsx`: when rendering the Method `<Select>` options, filter out `cash` from the `METHOD_LABEL` keys. Default `method` state stays `easypaisa`. The existing `method === "cash"` conditionals can remain as harmless dead code (or be removed — I'll remove them for cleanliness).
 
-### 3. Untouched
-- `src/lib/payments.ts` helpers, DB schema, and `PaymentCard` component stay as-is.
-
-## Acceptance
-- Tenant Payments page shows only the rent card + a single list of sent payments.
-- Landlord Payments page shows only a single list of payments received from tenants.
-- Build passes.
+### Acceptance
+- Dropdown shows only: Bank transfer, EasyPaisa, JazzCash.
+- Reference number field is always shown (since cash is no longer selectable).
+- No DB / schema changes.

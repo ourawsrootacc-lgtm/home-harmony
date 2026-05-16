@@ -93,9 +93,11 @@ export function SubmitPaymentDialog({
             <Select value={method} onValueChange={(v) => setMethod(v as PaymentMethod)}>
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
-                {(Object.keys(METHOD_LABEL) as PaymentMethod[]).map((m) => (
-                  <SelectItem key={m} value={m}>{METHOD_LABEL[m]}</SelectItem>
-                ))}
+                {(Object.keys(METHOD_LABEL) as PaymentMethod[])
+                  .filter((m) => m !== "cash")
+                  .map((m) => (
+                    <SelectItem key={m} value={m}>{METHOD_LABEL[m]}</SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
