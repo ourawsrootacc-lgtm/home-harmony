@@ -8,8 +8,18 @@ import { formatPKR } from "@/lib/format";
 import { useAuth } from "@/providers/AuthProvider";
 import { PropertyMap } from "@/components/map/PropertyMap";
 import { ConfigBanner } from "@/components/feedback/Feedback";
-import { BedDouble, Bath, Maximize, MapPin, ShieldCheck } from "lucide-react";
+import { BedDouble, Bath, Maximize, MapPin, ShieldCheck, Upload, X, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import {
+  uploadAppDoc, APP_DOC_LABEL, INCOME_PROOF_KINDS, type AppDocKind,
+} from "@/lib/documents";
+
+type DraftFile = { kind: AppDocKind; file: File };
+
+const TENANT_KINDS: AppDocKind[] = [
+  "cnic", "payslip", "bank_statement", "employment_letter", "police_clearance",
+];
+const OPTIONAL_KINDS: AppDocKind[] = ["employment_letter", "police_clearance"];
 
 export default function PropertyDetail() {
   const { id } = useParams();
