@@ -74,7 +74,12 @@ export default function Browse() {
           <Input className="pl-9" placeholder="Search by title…" defaultValue={q}
             onKeyDown={(e) => { if (e.key === "Enter") update("q", (e.target as HTMLInputElement).value); }} />
         </div>
-        <Select value={city || "all"} onValueChange={(v) => { update("city", v === "all" ? "" : v); update("society", ""); }}>
+        <Select value={city || "all"} onValueChange={(v) => {
+          const p = new URLSearchParams(params);
+          if (v && v !== "all") p.set("city", v); else p.delete("city");
+          p.delete("society");
+          setParams(p, { replace: true });
+        }}>
           <SelectTrigger className="w-[150px]"><SelectValue placeholder="City" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All cities</SelectItem>

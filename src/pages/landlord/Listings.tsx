@@ -28,7 +28,7 @@ export default function LandlordListings() {
   const remove = async (id: string) => {
     if (!confirm("Delete this listing? This cannot be undone.")) return;
 
-    // Clean up storage objects first (Lovable Cloud disallows DB triggers
+    // Clean up storage objects first (Supabase disallows DB triggers
     // touching storage.objects). Best-effort: ignore "not found" errors.
     try {
       const [{ data: imgs }, { data: docs }] = await Promise.all([
