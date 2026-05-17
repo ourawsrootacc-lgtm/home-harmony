@@ -1,46 +1,47 @@
-## Problem
+## Root cause
 
-`npx supabase db push` fails on the cleanup migration `20260524110000_remove_demo_accounts.sql`:
+The database is not generally broken. `npx supabase db push` is failing because the cleanup migration deletes rows from `auth.users` while several tables still contain foreign keys to those same demo user IDs **without `ON DELETE CASCADE`**.
 
-```
-ERROR: update or delete on table "users" violates foreign key constraint
-       "lease_signatures_user_id_fkey" on table "lease_signatures"
-```
+We fixed the first blocker (`lease_signatures.user_id`), so PostgreSQL moved to the next blocker shown in your screenshot: `payment_events.actor_id`. If we only fix that one, more may appear. The right fix is to clear every non-cascading user reference before deleting the demo users.
 
-Root cause: `public.lease_signatures.user_id` references `auth.users(id)` **without** `ON DELETE CASCADE` (see `supabase/migrations/20260516120006_lease_lifecycle.sql` line 65). The demo landlord/tenant signed lease versions, so deleting their `auth.users` row is blocked.
+## What I found in the deep search
 
-Other tables (profiles, user_roles, properties, leases, etc.) cascade fine; only `lease_signatures` (and potentially a few other non-cascading FKs) block the delete.
+These demo-user references can block deletion because they do not cascade automatically:
 
-## Fix
+- `payment_events.actor_id` — current screenshot error
+- `payments.reviewed_by`
+- `lease_signatures.user_id`
+- `lease_versions.proposed_by`
+- `lease_events.actor_id`
+- `deposit_ledger.recorded_by`
+- `deposit_ledger.acknowledged_by`
+- `lease_requests.requested_by`
+- `lease_requests.responded_by`
+- `maintenance_tickets.assigned_to`
+- `maintenance_events.actor_id`
+- `maintenance_quotes.created_by`
+- `maintenance_cancellations.cancelled_by`
 
-Update `supabase/pending_migrations/20260524110000_remove_demo_accounts.sql` to explicitly purge rows that reference the demo users via non-cascading FKs **before** the `delete from auth.users`:
+Many other tables are safe because they already use `ON DELETE CASCADE`, for example `profiles`, `user_roles`, `properties`, `applications`, `leases`, `payments.payer_id`, `payments.payee_id`, `payment_methods`, documents, messages, favorites, and reviews.
 
-```sql
-with demo as (
-  select id from auth.users
-  where email in (
-    'admin@homerentals.pk','landlord@homerentals.pk',
-    'tenant@homerentals.pk','maintenance@homerentals.pk'
-  )
-)
-delete from public.lease_signatures
- where user_id in (select id from demo);
+## Implementation plan
 
-delete from auth.users
- where email in (
-   'admin@homerentals.pk','landlord@homerentals.pk',
-   'tenant@homerentals.pk','maintenance@homerentals.pk'
- );
-```
+1. Update `supabase/pending_migrations/20260524110000_remove_demo_accounts.sql` so it defines the four demo users once in a temporary CTE/table.
+2. Before `delete from auth.users`, clean all non-cascading references in a safe dependency order:
+   - delete pure audit/event rows that point to demo users where appropriate (`payment_events`, `lease_events`, `maintenance_events`)
+   - delete/clear lifecycle records that directly depend on those users (`lease_signatures`, `lease_requests`, `deposit_ledger`, `maintenance_cancellations`)
+   - null optional references where preserving parent rows is safer (`payments.reviewed_by`, `maintenance_tickets.assigned_to`)
+   - delete demo-authored records that cannot exist without their user (`lease_versions.proposed_by`, `maintenance_quotes.created_by`) after child rows are handled
+3. Then delete the demo accounts from `auth.users`, allowing all cascading tables to clean themselves normally.
+4. Update `.lovable/plan.md` with the corrected diagnosis so the local setup instructions no longer suggest fixing one table at a time.
 
-This keeps the cascade-based cleanup for everything else and only manually clears the one FK that lacks `ON DELETE CASCADE`.
+## Local command after the change
 
-## Verify
+Because your failed migration may now be recorded as failed locally/remotely, run:
 
-Re-run `npx supabase db push` locally — the migration should apply cleanly and the four demo accounts disappear.
-
-If push still reports it as already applied/failed, run:
-```
+```bash
 npx supabase migration repair --status reverted 20260524110000
 npx supabase db push
 ```
+
+If the first command says there is nothing to repair, just run `npx supabase db push` again.
