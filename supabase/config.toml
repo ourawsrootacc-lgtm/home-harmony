@@ -6,4 +6,4 @@ project_id = "your-project-ref"
 # Local Postgres port if you ever run `supabase start` locally (optional).
 port = 54322
 shadow_port = 54320
-major_version = 15
+major_version = 17
