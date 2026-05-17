@@ -1,47 +1,38 @@
-## Root cause
+## Issue 1 — City dropdown doesn't apply selection
 
-The database is not generally broken. `npx supabase db push` is failing because the cleanup migration deletes rows from `auth.users` while several tables still contain foreign keys to those same demo user IDs **without `ON DELETE CASCADE`**.
+**Root cause:** In `src/pages/public/Browse.tsx`, the city `<Select>` calls `update("city", ...)` then `update("society", "")` back-to-back. Each `update` reads the same stale `params` snapshot and calls `setParams`, so the second call overwrites the first — the new city is lost and the URL only clears `society`. Result: the dropdown visually reverts to "All cities".
 
-We fixed the first blocker (`lease_signatures.user_id`), so PostgreSQL moved to the next blocker shown in your screenshot: `payment_events.actor_id`. If we only fix that one, more may appear. The right fix is to clear every non-cascading user reference before deleting the demo users.
+**Fix:** Replace the two sequential `update` calls in the city `onValueChange` with a single `setParams` call that mutates one fresh `URLSearchParams` (sets/deletes `city` and clears `society` together). No other logic changes.
 
-## What I found in the deep search
-
-These demo-user references can block deletion because they do not cascade automatically:
-
-- `payment_events.actor_id` — current screenshot error
-- `payments.reviewed_by`
-- `lease_signatures.user_id`
-- `lease_versions.proposed_by`
-- `lease_events.actor_id`
-- `deposit_ledger.recorded_by`
-- `deposit_ledger.acknowledged_by`
-- `lease_requests.requested_by`
-- `lease_requests.responded_by`
-- `maintenance_tickets.assigned_to`
-- `maintenance_events.actor_id`
-- `maintenance_quotes.created_by`
-- `maintenance_cancellations.cancelled_by`
-
-Many other tables are safe because they already use `ON DELETE CASCADE`, for example `profiles`, `user_roles`, `properties`, `applications`, `leases`, `payments.payer_id`, `payments.payee_id`, `payment_methods`, documents, messages, favorites, and reviews.
-
-## Implementation plan
-
-1. Update `supabase/pending_migrations/20260524110000_remove_demo_accounts.sql` so it defines the four demo users once in a temporary CTE/table.
-2. Before `delete from auth.users`, clean all non-cascading references in a safe dependency order:
-   - delete pure audit/event rows that point to demo users where appropriate (`payment_events`, `lease_events`, `maintenance_events`)
-   - delete/clear lifecycle records that directly depend on those users (`lease_signatures`, `lease_requests`, `deposit_ledger`, `maintenance_cancellations`)
-   - null optional references where preserving parent rows is safer (`payments.reviewed_by`, `maintenance_tickets.assigned_to`)
-   - delete demo-authored records that cannot exist without their user (`lease_versions.proposed_by`, `maintenance_quotes.created_by`) after child rows are handled
-3. Then delete the demo accounts from `auth.users`, allowing all cascading tables to clean themselves normally.
-4. Update `.lovable/plan.md` with the corrected diagnosis so the local setup instructions no longer suggest fixing one table at a time.
-
-## Local command after the change
-
-Because your failed migration may now be recorded as failed locally/remotely, run:
-
-```bash
-npx supabase migration repair --status reverted 20260524110000
-npx supabase db push
+```ts
+onValueChange={(v) => {
+  const p = new URLSearchParams(params);
+  if (v && v !== "all") p.set("city", v); else p.delete("city");
+  p.delete("society");
+  setParams(p, { replace: true });
+}}
 ```
 
-If the first command says there is nothing to repair, just run `npx supabase db push` again.
+## Issue 2 — Remove every trace of Lovable
+
+Audit found Lovable references in these files only (no `lovable-tagger` plugin, no badges, no Lovable scripts in `index.html`):
+
+| File | Action |
+| --- | --- |
+| `.lovable/` folder (contains `plan.md`) | **Delete entire folder** |
+| `bunfig.toml` line `minimumReleaseAgeExcludes = ["@lovable.dev/vite-tanstack-config"]` | Remove the line (keep the rest of the file) |
+| `LOCAL_SETUP.md` — "After any change made in Lovable…" and the entire "Going production-clean" section mentioning strip-lovable | Rewrite those two spots so they read as a normal local-dev workflow with no Lovable wording |
+| `src/pages/landlord/Listings.tsx` line 31 comment | Reword comment to drop "Lovable Cloud" (just say "Supabase storage doesn't allow…") |
+| `supabase/pending_migrations/20260524100000_drop_doc_storage_triggers.sql` header comment | Reword to drop "Lovable Cloud" |
+| `supabase/pending_migrations/20260524110000_remove_demo_accounts.sql` line 11 comment | Reword to drop "Lovable Cloud" |
+
+Not touched (intentional):
+- `bun.lock` and `.workspace/.git/config` — internal artifacts not shipped to evaluators; `bun.lock` only mentions the excluded package name and rewriting it would force a reinstall with no user-visible benefit. If you want a 100% clean lockfile too, say the word and I'll regenerate it.
+- `package.json`, `vite.config.ts`, `index.html`, `README.md`, `src/main.tsx` — already clean.
+
+## Verification after implementation
+
+1. Open `/browse`, pick **Peshawar** → URL becomes `?city=Peshawar`, the dropdown shows "Peshawar", listings filter, and the Society dropdown appears.
+2. `grep -ril lovable .` (excluding `bun.lock` and `.workspace/`) returns zero matches.
+3. `.lovable/` directory no longer exists.
+4. App still builds and runs (`npm run dev`).
