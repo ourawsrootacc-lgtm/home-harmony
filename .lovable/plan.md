@@ -1,48 +1,74 @@
-## Problem
+# Fix delete error + remove demo data
 
-Your local `supabase db push` fails on `20260523100000_property_society_and_marlas.sql` at step 3:
+## Root cause
 
+Clicking the red trash icon on `/app/landlord/listings` calls `delete from properties`. The cascade then deletes rows from `property_documents`, which fires this trigger from `supabase/migrations/20260520100000_documents.sql`:
+
+```sql
+create trigger property_documents_delete_storage
+  before delete on public.property_documents
+  for each row execute function public.delete_property_doc_storage();
+-- function body: delete from storage.objects where ...
 ```
-ERROR: check constraint "properties_city_check" of relation "properties" is violated by some row
-```
 
-Your local DB has seeded properties in cities outside the supported five (Rawalpindi, Faisalabad, plus any others from `scripts/seed.mjs`). The constraint refuses to apply while those rows exist.
+Lovable Cloud's managed Postgres blocks any direct write to `storage.objects` ("Direct deletion from storage tables is not allowed. Use the Storage API instead."), so the whole transaction aborts and the listing is never deleted. The sibling `application_documents_delete_storage` trigger has the same problem.
 
 ## Fix
 
-Update the migration to **normalize/remove unsupported-city rows before adding the constraint**, so it's idempotent and safe on any database (local seeded, fresh, or production).
+### 1. New migration: drop the storage-touching triggers
 
-Edit `supabase/pending_migrations/20260523100000_property_society_and_marlas.sql` — in step 3, before the `ADD CONSTRAINT`, delete properties whose city isn't in the allowed five. Cascading FKs (applications, leases, favorites, maintenance_tickets, property_images) will clean up dependents.
+`supabase/pending_migrations/20260524100000_drop_doc_storage_triggers.sql`
 
 ```sql
--- 3. Restrict city to the 5 supported cities.
-alter table public.properties
-  drop constraint if exists properties_city_check;
-
--- Remove legacy rows for unsupported cities so the new check can apply.
-delete from public.properties
- where city not in ('Karachi','Lahore','Islamabad','Peshawar','Quetta');
-
-alter table public.properties
-  add constraint properties_city_check
-  check (city in ('Karachi','Lahore','Islamabad','Peshawar','Quetta'));
+drop trigger if exists application_documents_delete_storage on public.application_documents;
+drop trigger if exists property_documents_delete_storage   on public.property_documents;
+drop function if exists public.delete_app_doc_storage();
+drop function if exists public.delete_property_doc_storage();
 ```
 
-## Re-run locally
+Storage cleanup moves to app code, which is the documented Lovable Cloud pattern.
 
-```bash
-supabase db push
-```
+### 2. App-side cleanup before delete (`src/pages/landlord/Listings.tsx`)
 
-The earlier partial run already added `society`, `area_marlas`, the trigger, and dropped the NOT NULL on `area_sqft`, so the migration's `if not exists` / `drop ... if exists` guards make a re-run safe.
+Rewrite `remove(id)` so it:
 
-If `db push` still says "already applied" but the constraint isn't there, mark the migration as reverted and retry:
+1. Loads `property_images(url)` and `property_documents(storage_path)` for the property.
+2. Derives storage object paths:
+   - For `property-images`: parse the public URL → take the segment after `/object/public/property-images/`.
+   - For `documents`: use `storage_path` directly.
+3. Calls `supabase.storage.from('property-images').remove(paths)` and `supabase.storage.from('documents').remove(paths)` (ignore "not found" errors so a missing file doesn't block the delete).
+4. Then `supabase.from('properties').delete().eq('id', id)`.
+5. Toasts success/failure and reloads.
 
-```bash
-supabase migration repair --status reverted 20260523100000
-supabase db push
-```
+No other UI changes.
 
-## Note on seed data
+### 3. Wipe demo data (run via DB tool, not a migration)
 
-`scripts/seed.mjs` still inserts Rawalpindi and Faisalabad properties — those inserts will now fail after the constraint is in place. I'll also trim that seed list to the five supported cities so `node scripts/seed.mjs` keeps working.
+Demo emails seeded by `scripts/seed.mjs`:
+- `admin@homerentals.pk`
+- `landlord@homerentals.pk`
+- `tenant@homerentals.pk`
+- `maintenance@homerentals.pk`
+
+Plan: `delete from auth.users where email in (...)`. FK cascades clean up `profiles`, `user_roles`, `properties` (and through them `property_images`, `applications`, `leases`, `maintenance_tickets`, `favorites`, `property_documents`), `messages`, `notifications`, `complaints`.
+
+Before deleting users we'll also clear leftover storage objects in their folders via the same Storage API approach (best-effort; managed UI also lets the user clean buckets).
+
+Also delete the demo listing currently visible on screen ("Studio in F-7 Markaz") which belongs to the demo landlord — covered by the cascade above.
+
+### 4. Stop re-seeding demo data
+
+Update `scripts/seed.mjs` so it is a no-op by default (exit early with a message: "Demo seeding disabled. Set SEED_DEMO=1 to enable."). This prevents accidental re-creation of the four demo accounts on future local runs.
+
+## Files touched
+
+- `supabase/pending_migrations/20260524100000_drop_doc_storage_triggers.sql` (new)
+- `src/pages/landlord/Listings.tsx` (rewrite `remove`)
+- `scripts/seed.mjs` (gate behind `SEED_DEMO=1`)
+- DB cleanup: SQL run via the migration/insert tool to remove the four demo users and their data.
+
+## Verification
+
+1. Apply migration → trash icon on the remaining real listing succeeds with no error toast.
+2. After demo wipe → `/app/landlord/listings` (logged in as a real landlord) no longer shows demo listings; `/browse` no longer shows demo properties.
+3. `node scripts/seed.mjs` prints the disabled message instead of inserting users.

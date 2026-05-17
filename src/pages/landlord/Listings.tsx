@@ -27,6 +27,29 @@ export default function LandlordListings() {
 
   const remove = async (id: string) => {
     if (!confirm("Delete this listing? This cannot be undone.")) return;
+
+    // Clean up storage objects first (Lovable Cloud disallows DB triggers
+    // touching storage.objects). Best-effort: ignore "not found" errors.
+    try {
+      const [{ data: imgs }, { data: docs }] = await Promise.all([
+        supabase.from("property_images").select("url").eq("property_id", id),
+        supabase.from("property_documents").select("storage_path").eq("property_id", id),
+      ]);
+
+      const imgPaths = (imgs ?? [])
+        .map((r: any) => {
+          const m = String(r.url ?? "").match(/\/object\/public\/property-images\/(.+)$/);
+          return m?.[1];
+        })
+        .filter(Boolean) as string[];
+      if (imgPaths.length) await supabase.storage.from("property-images").remove(imgPaths);
+
+      const docPaths = (docs ?? []).map((r: any) => r.storage_path).filter(Boolean) as string[];
+      if (docPaths.length) await supabase.storage.from("documents").remove(docPaths);
+    } catch {
+      // Non-fatal — proceed with DB delete
+    }
+
     const { error } = await supabase.from("properties").delete().eq("id", id);
     if (error) toast.error(error.message); else { toast.success("Deleted"); load(); }
   };

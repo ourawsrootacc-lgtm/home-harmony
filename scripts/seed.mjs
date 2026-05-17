@@ -18,6 +18,11 @@ if (!url || !key) { console.error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE
 const sb = createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 const PWD = "Demo@1234";
 
+if (process.env.SEED_DEMO !== "1") {
+  console.log("Demo seeding disabled. Set SEED_DEMO=1 to enable.");
+  process.exit(0);
+}
+
 const USERS = [
   { email: "admin@homerentals.pk",       full_name: "Aisha Khan",   phone: "+923001112233", role: "admin" },
   { email: "landlord@homerentals.pk",    full_name: "Omar Sheikh",  phone: "+923002223344", role: "landlord" },
