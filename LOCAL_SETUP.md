@@ -41,7 +41,7 @@ npm run dev
 
 ## Day-to-day workflow
 
-After any change made in Lovable (auto-pushed to GitHub):
+After pulling new commits:
 
 ```bash
 git pull
@@ -67,12 +67,7 @@ That's it.
 | Problem | Fix |
 | --- | --- |
 | `supabase db push` says "no migrations to apply" but DB looks stale | A previous migration was applied via SQL Editor. Run `supabase migration repair --status applied <version>` for each old timestamp, then `db push`. |
-| Mapbox map not rendering | Token missing or invalid — UI falls back to a banner; safe to ignore for evaluator demo. |
+| Mapbox map not rendering | Token missing or invalid — UI falls back to a banner; safe to ignore for the demo. |
 | `duplicate key … leases_one_active_per_property` | A property already has an active lease. End it first from Landlord → Listings. |
 | Auth "session missing" after redeploy | Clear `localStorage` for `localhost:5173` and sign in again. |
 
----
-
-## Going production-clean (final step before submission)
-
-When you're ready to hand the repo to evaluators with no Lovable footprint, ask the assistant to "run the strip-lovable cleanup". That step removes Lovable branding, the `lovable-tagger` plugin, `.lovable/` folder, and (optionally) wipes git history so the project looks 100% authored by you.
