@@ -8,7 +8,7 @@
 --
 -- Storage objects for these users (property images, documents, payment
 -- proofs) must be cleared via the Storage API separately — SQL cannot
--- touch storage.objects on Lovable Cloud.
+-- touch storage.objects directly in Supabase.
 
 do $$
 declare

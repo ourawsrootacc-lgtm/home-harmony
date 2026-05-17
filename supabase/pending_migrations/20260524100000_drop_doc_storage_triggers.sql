@@ -1,4 +1,4 @@
--- Lovable Cloud blocks direct writes to storage.objects from SQL.
+-- Supabase blocks direct writes to storage.objects from SQL.
 -- These triggers caused property/application deletes to fail with
 -- "Direct deletion from storage tables is not allowed."
 -- Storage cleanup is now handled in app code via the Storage API.
