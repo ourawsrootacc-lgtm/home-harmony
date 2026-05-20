@@ -1,74 +1,76 @@
-# Plan: HomeRentals FYP Thesis (~100 pages)
+# Plan: HomeRentals Final Defense Presentation (.pptx)
 
-I will produce a single, defense-ready Microsoft Word document — `HomeRentals_FYP_Thesis.docx` — that follows the CECOS Software Engineering FYP format from your uploaded sample exactly (Times New Roman 12 for front matter, Calibri 12 / 1.5 line spacing for body, Calibri Bold headings, justified paragraphs, page numbers, footer "Department of SE, CECOS University of IT & Emerging Sciences, Pakistan", running header with project title).
+I will produce a single downloadable file — **`HomeRentals_Final_Defense.pptx`** — designed to wow evaluators while staying simple enough for a non-technical audience to follow. Built with `pptxgenjs` at 1920×1080, exported, then visually QA'd page-by-page (converted to PDF → JPGs) before delivery.
 
-The content will be grounded entirely in the actual HomeRentals codebase (React + Vite + Supabase + Mapbox), the 17 migrations, RLS policies, lease lifecycle, manual payments module, maintenance workflow, and admin tools — so every claim is defensible in the viva.
+## Design direction
 
-## Structure (mirrors the CECOS template exactly)
+- **Palette:** Midnight Executive — deep navy `#1E2761` dominant, ice-blue `#CADCFC` supporting, warm gold `#F5B700` accent. Premium, trustworthy, real-estate appropriate.
+- **Typography:** Georgia (headers) + Calibri (body). Title slides 88–104pt, section headers 40–54pt, body 28–32pt, captions 20–22pt — all projection-legible.
+- **Motif:** Gold left-edge accent bar on content slides + small gold icon-in-circle next to each section header. Dark "sandwich" intro/closing, light content slides in between.
+- **Density rule:** One idea per slide. Max 4 bullets, max 3 cards per row. Plain-English first, jargon in a small caption underneath.
 
-**Front matter (~10 pages)**
-- Binding page, Inside title page, Abstract (1 page), Undertaking, Acknowledgements, Dedication, Table of Contents, List of Figures, List of Tables, List of Abbreviations
+## Slide outline (~28 slides, mapped to the rubric)
 
-**Chapter 1 — Introduction (~8 pages)**
-1.1 Introduction · 1.2 Existing System · 1.3 Problem Statement · 1.4 Project Objectives · 1.5 Project Scope · 1.6 Gap Analysis · 1.7 Proposed Solution · 1.8 Project Plan (Gantt) · 1.9 Report Outline · 1.10 Empathy Map
+**Opening (3)**
+1. Title — Project name, tagline ("Pakistan's end-to-end rental lifecycle platform"), student/supervisor/session placeholders
+2. Agenda — visual roadmap of the 7 rubric sections
+3. The Problem in 30 seconds — Zameen shows ads, WhatsApp handles the rest → chaos, lost receipts, disputes
 
-**Chapter 2 — Software Requirement Specifications (~16 pages)**
-Full IEEE-style SRS: purpose, document conventions, intended audience, product perspective, user classes (tenant/landlord/maintenance/admin), operating environment, design/implementation constraints, assumptions, external interfaces (UI/HW/SW/Comms), 10+ system features each with REQ-IDs, performance/safety/security/quality requirements.
+**Introduction (3)**
+4. What HomeRentals is — one-line pitch + 4 icon pillars (Browse, Apply, Lease, Pay)
+5. Who it's for — Tenants, Landlords, Maintenance, Admin (4 persona cards)
+6. Objectives & Scope (in / out) — clear "we did this, we deliberately didn't do that"
 
-**Chapter 3 — Use Case Analysis (~10 pages)**
-Actor catalogue, use case diagram (per role), 12+ fully expanded use case descriptions (preconditions, main flow, alternate, postconditions) covering signup, browse, apply, approve lease, lifecycle countering, payment submit/approve/dispute, maintenance ticket, admin moderation.
+**Literature Review / Similar Systems (2)**
+7. Comparison table — HomeRentals vs Zameen, Graana, Airbnb, Kunjee (rows: listings, applications, leases, payments, maintenance, RLS security)
+8. The gap we fill — visual Venn-style "classifieds + short-stay + property-mgmt = us"
 
-**Chapter 4 — System Design (~18 pages)**
-4.1 Overview · 4.2 Design Approach · 4.3 Architecture Diagram (SPA + Supabase BaaS) · 4.4 ER Diagram (full, from your migrations) · 4.5 Class Diagram · 4.6 Sequence Diagrams (login, apply→lease, payment approval, maintenance) · 4.7 Operation Contracts · 4.8 Activity Diagrams · 4.9 State Diagrams (lease + ticket + payment) · 4.10 Component Diagram · 4.11 Deployment Diagram · 4.12 DFD Level 0 & 1
+**Examiner feedback addressed (1)**
+9. Progress-presentation comments & fixes — left column: comment, right column: how we resolved it (placeholders you can edit)
 
-**Chapter 5 — Implementation (~14 pages)**
-Tools/stack, folder structure, key code excerpts (AuthProvider, RLS `has_role()`, lease lifecycle SQL, payment submit, Browse filter fix, Mapbox fallback), data validation (Zod, CNIC/phone regex), version control (Git), CI, deployment to Vercel/Netlify.
+**Design — Interface / Screens (4)**
+10. System architecture — SPA ↔ Supabase ↔ Mapbox diagram, explained in 3 plain sentences
+11. Database ERD (simplified) — 8 core tables with relationship lines
+12. Key user flow — Tenant Apply → Landlord Approve → Lease → Pay (sequence-style)
+13. UI tour — 4 real screenshots placeholder grid (Browse, Property Detail, Landlord Dashboard, Payments)
 
-**Chapter 6 — Testing and Evaluation (~10 pages)**
-Strategy, test plan, test cases table (40+), unit tests, integration tests, RLS policy tests, performance, stress, UAT with screenshots.
+**Design — Code (3)**
+14. Folder structure — annotated tree of `src/` so a layperson sees order
+15. Security highlight — Row-Level Security explained as "an invisible guard at the database door" + 6-line `has_role()` snippet
+16. Lease state machine — proposed → countered → active → ended, as a colored flow
 
-**Chapter 7 — Summary, Conclusion, Future Enhancements (~5 pages)**
-Project summary, objectives achieved, lessons learned, limitations, future work (Stripe live, mobile app, AI matching, i18n Urdu).
+**Testing (3)**
+17. Techniques used — Manual UAT, RLS policy tests, Zod validation, cross-browser (4 icon cards)
+18. Test results — table: 40 functional cases, 12 RLS cases, pass rate, key bugs caught
+19. Short demo video placeholder slide — 16:9 black frame with "▶ Live demo" + QR-code placeholder linking to a hosted clip you'll record
 
-**Appendices (~10 pages)** — A: User Manual · B: Administrator Manual · C: Promotional Material · D: Full ER schema · E: Glossary
+**Deployment (2)**
+20. How it's hosted — Vercel (frontend) + Supabase (backend) diagram, "deploy in 2 minutes, zero servers to babysit"
+21. Future extensions — Stripe/JazzCash live payments, mobile app, AI matching, Urdu i18n
 
-**References & Bibliography** — 25+ IEEE-format citations (React, Vite, Supabase, PostgreSQL, RLS papers, Mapbox, OWASP, IEEE 830 SRS, PMBOK, etc.)
+**Defense ammunition (3)** *(short slides aimed at the "silly questions")*
+22. Why no admin dashboard? — depth-over-breadth decision, 3 bullets
+23. Why manual payment proof? — regulatory + PCI-DSS + market reality (3 cards)
+24. Why not just use Zameen? — classifieds stop at "call the owner"; we handle the next 12 months
 
-## Diagrams included (all rendered as images embedded in the .docx)
-
-| # | Diagram | Tool |
-|---|---|---|
-| 1 | System Architecture (SPA ↔ Supabase ↔ Mapbox) | Mermaid → PNG |
-| 2 | ER Diagram (full schema) | Mermaid → PNG |
-| 3 | Use Case Diagram (4 actors) | PlantUML/Mermaid → PNG |
-| 4 | Class Diagram | Mermaid → PNG |
-| 5 | Sequence: Tenant Apply → Lease | Mermaid → PNG |
-| 6 | Sequence: Payment Submit → Approve | Mermaid → PNG |
-| 7 | Activity: Maintenance Ticket | Mermaid → PNG |
-| 8 | State Machine: Lease lifecycle | Mermaid → PNG |
-| 9 | State Machine: Ticket status | Mermaid → PNG |
-| 10 | State Machine: Payment status | Mermaid → PNG |
-| 11 | Component Diagram | Mermaid → PNG |
-| 12 | Deployment Diagram | Mermaid → PNG |
-| 13 | DFD Level 0 | Mermaid → PNG |
-| 14 | DFD Level 1 | Mermaid → PNG |
-| 15 | Gantt project plan | Mermaid → PNG |
-| 16 | Empathy Map | Generated PNG |
+**Closing (4)**
+25. Final product — what's ready today (checklist of working modules)
+26. Lessons learned — 3 short bullets
+27. References — IEEE-style mini list (React, Supabase, OWASP, RLS paper, etc.)
+28. Thank You / Q&A — bold full-bleed close with contact placeholder
 
 ## Technical execution
 
-1. Render all 16 diagrams to PNG using `mmdc` (mermaid-cli) into `/tmp/figures/`.
-2. Build the .docx with `docx` (JavaScript) per the docx skill — explicit US Letter page size, Calibri body, Times New Roman front matter, semantic heading styles (Heading1/2/3 overrides), Table of Contents field, List of Figures, List of Tables, header & footer with page numbers, embedded images with captions, properly formatted requirement tables and use-case tables.
-3. Validate the .docx (`validate_document.py`).
-4. QA: convert to PDF (LibreOffice) and inspect every page as JPG to catch overflow, clipped images, broken tables, missing captions. Fix and re-render until clean.
-5. Deliver as `<presentation-artifact>` so you can download and open it.
+1. Write `/tmp/deck/build.js` using `pptxgenjs` (1920×1080, embedded base64 images for any icons/diagrams).
+2. Render the architecture, ERD, lease state, and flow diagrams via Mermaid CLI → PNG → embed as base64 (paths break LibreOffice PDF conversion).
+3. Export to `/mnt/documents/HomeRentals_Final_Defense.pptx`.
+4. **Mandatory QA:** `soffice --convert-to pdf` → `pdftoppm` → inspect every slide JPG. Fix overflow, contrast, alignment, leftover placeholder text. Re-render until a full clean pass.
+5. Deliver via `<presentation-artifact>` tag.
 
-## What this plan is NOT
+## What this is NOT
 
-- Not changing any project source code.
-- Not 100 pages of filler — each page is grounded in real artifacts from your repo (migrations, components, RLS policies). Final length will land in the 90–110 page range depending on diagram sizes and Word's pagination.
-- Not a substitute for your name/registration numbers/supervisor — placeholders will be clearly marked `[Your Name]`, `[Reg #]`, `[Supervisor]`, `[Session]` for you to fill in.
+- Not 60+ slides of filler — 28 focused slides, ~12 minute talk.
+- Not auto-recorded video; slide 19 is a placeholder frame where you drop your own screen-record link/QR.
+- Not pre-filled with your name — `[Student Name]`, `[Reg #]`, `[Supervisor]`, `[Session]` left as clear placeholders.
 
-If you approve, I will execute end-to-end in one pass and hand back the downloadable file plus a short Q&A guide.
-
-**Before I start, one quick question if you want to answer (otherwise I'll use placeholders):** student name(s) + registration number(s), supervisor name, and session (e.g., 2024-2025)? You can also just say "use placeholders" and fill them in yourself in Word.
+**One quick question before I build:** do you want me to use the same student/supervisor/session placeholders as the thesis, or do you have the actual names now? Reply with the details or just "use placeholders" and I'll start.
